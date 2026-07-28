@@ -1,0 +1,21 @@
+{
+  // Ner Shava Candles Corp. — nershava.avrumy95.workers.dev
+  // Secrets (set on the worker, NOT here — use `npx wrangler secret put NAME`):
+  //   ADMIN_EMAIL, ADMIN_PASSWORD, SESSION_SECRET,
+  //   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+  //   RESEND_API_KEY, NOTIFY_EMAIL, MAIL_FROM
+  "name": "nershava",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-07-20",
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nershava",
+      "database_id": "56b440f6-07f3-42e1-bfb8-9a255be50804"
+    }
+  ]
+}
