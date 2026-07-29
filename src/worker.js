@@ -12,7 +12,7 @@ const EMAIL = "office@nershava.com";
 const TAGLINE = "The beauty of Shabbos, hand-poured.";
 
 // Bump on every deploy that changes site.css or site.js so browsers pick it up.
-const ASSET_VERSION = "5";
+const ASSET_VERSION = "6";
 
 const ORDER_STATUSES = ["pending", "paid", "processing", "shipped", "cancelled"];
 const INQ_STATUSES = ["New", "Replied", "Closed"];
@@ -184,7 +184,7 @@ function layout({ title, description, body, path = "/", bodyClass = "", head = "
 <link rel="icon" href="/assets/img/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Frank+Ruhl+Libre:wght@500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css?v=${ASSET_VERSION}">
 ${head}
 </head>
@@ -313,6 +313,66 @@ const trustStrip = () => `<section class="trust">
   </div>
 </section>`;
 
+// Hero banner slides. Each is a poster: Hebrew display line, English promise,
+// the product shot as the centrepiece, and a spec strip along the bottom.
+const HERO_SLIDES = [
+  {
+    heb: "וואקסענע שבת ליכט",
+    en: "Handmade from 100% pure beeswax.",
+    sub: "The candle that makes the Shabbos table glow the way it was meant to.",
+    cta: ["Shop Shabbos candles", "/candles/beeswax-shabbos"],
+    img: "beeswax-shabbos-7hr.png",
+    tag: "Burns 4, 5 or 7 hours · Smokeless &amp; dripless",
+  },
+  {
+    heb: "הבדלה ליכט",
+    en: "The braided flame that carries Shabbos out.",
+    sub: "Hand-braided pure beeswax, with the wide flame the bracha calls for.",
+    cta: ["Shop havdalah", "/candles/havdalah-chupah"],
+    img: "havdalah-braided.png",
+    tag: "Hand-braided · 100% pure beeswax",
+  },
+  {
+    heb: "נר נשמה",
+    en: "A light that burns steady and true.",
+    sub: "Twenty-six hours, forty-eight, seventy-two — or a full week.",
+    cta: ["Shop yahrtzeit", "/candles/yahrtzeit"],
+    img: "yahrtzeit-7day.png",
+    tag: "26 hr · 48 hr · 72 hr · 7 day",
+  },
+];
+
+function heroBanner() {
+  const slides = HERO_SLIDES.map((s, i) => `
+    <article class="hslide${i === 0 ? " is-on" : ""}" data-hslide="${i}"${i ? ' aria-hidden="true"' : ""}>
+      <div class="hslide-copy">
+        <p class="hslide-heb" lang="he" dir="rtl">${s.heb}</p>
+        ${i === 0
+          ? `<h1 class="hslide-en">${s.en}</h1>`
+          : `<h2 class="hslide-en">${s.en}</h2>`}
+        <p class="hslide-sub">${esc(s.sub)}</p>
+        <a class="btn btn-pill" href="${s.cta[1]}"${i ? ' tabindex="-1"' : ""}>${esc(s.cta[0])}</a>
+      </div>
+      <div class="hslide-shot">
+        <img src="/assets/img/products/${s.img}" alt=""${i === 0 ? "" : ' loading="lazy"'} width="600" height="600">
+      </div>
+      <p class="hslide-tag">${s.tag}</p>
+    </article>`).join("");
+
+  const dots = HERO_SLIDES.map((s, i) =>
+    `<button type="button" class="hdot${i === 0 ? " is-on" : ""}" data-hdot="${i}"
+       aria-label="Show ${esc(s.cta[0]).replace(/^Shop /, "")}"${i === 0 ? ' aria-current="true"' : ""}></button>`).join("");
+
+  return `<section class="hero">
+  <div class="wrap">
+    <div class="hero-banner" data-hero aria-roledescription="carousel" aria-label="Ner Shava candles">
+      <div class="hero-stage">${slides}</div>
+      <div class="hero-dots">${dots}</div>
+    </div>
+  </div>
+</section>`;
+}
+
 const REASONS = [
   ["100% Pure Beeswax", "Made from pure beeswax — the traditional standard for a beautiful, natural flame."],
   ["Frum-Made, Start to Finish", "The only candle company in the world where every step is done by Shomrei Torah U'Mitzvos."],
@@ -332,18 +392,7 @@ async function pageHome(env) {
   ]);
 
   const body = `
-<section class="hero">
-  <div class="hero-media"><img src="/assets/img/hero-collection.jpg" alt="Ner Shava Shabbos, yahrtzeit and havdalah candles burning" width="1200" height="1387"></div>
-  <div class="wrap hero-in">
-    <p class="eyebrow">${esc(LEGAL)}</p>
-    <h1 class="hero-title">Shabbos, how holy you are.<br><em>Ner Shava, how beautiful you are.</em></h1>
-    <p class="hero-lede">Handmade candles of 100% pure beeswax — for a Shabbos table that glows the way it was meant to.</p>
-    <div class="hero-cta">
-      <a class="btn btn-gold" href="/candles">Shop the candles</a>
-      <a class="btn btn-ghost" href="/wholesale">Wholesale enquiries</a>
-    </div>
-  </div>
-</section>
+${heroBanner()}
 
 ${trustStrip()}
 

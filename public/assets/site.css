@@ -158,20 +158,80 @@ p:last-child { margin-bottom: 0; }
 
 /* ── hero ──────────────────────────────────────────────────────────────── */
 
-.hero { position: relative; background: var(--burgundy-dark); color: var(--cream); overflow: hidden; }
-.hero-media { position: absolute; inset: 0; }
-.hero-media img { width: 100%; height: 100%; object-fit: cover; object-position: 76% 42%; opacity: .85; }
-.hero::after {
-  content: ""; position: absolute; inset: 0;
+/* Hero — an inset banner "poster" per slide: Hebrew display line and promise
+   on the left, the product lit against a burgundy ground on the right. */
+.hero { padding: 1.1rem 0 0; background: var(--paper); }
+.hero-banner {
+  position: relative; overflow: hidden; border-radius: 8px;
   background:
-    linear-gradient(100deg, rgba(41, 10, 15, .96) 0%, rgba(41, 10, 15, .88) 32%, rgba(41, 10, 15, .52) 58%, rgba(41, 10, 15, .28) 100%),
-    linear-gradient(180deg, rgba(41, 10, 15, .5), rgba(41, 10, 15, .2) 40%, rgba(41, 10, 15, .55));
+    radial-gradient(90% 120% at 78% 42%, rgba(120, 40, 44, .95) 0%, rgba(62, 16, 22, .96) 45%, rgba(35, 8, 13, 1) 100%),
+    var(--burgundy-dark);
+  box-shadow: var(--shadow-lg);
 }
-.hero-in { position: relative; z-index: 2; padding: clamp(4rem, 9vw, 7rem) 0; max-width: 700px; }
-.hero .eyebrow { color: var(--gold-light); }
-.hero-title { font-size: clamp(2.1rem, 4.3vw, 3.3rem); color: var(--cream); margin-bottom: .55rem; letter-spacing: -.01em; text-shadow: 0 2px 24px rgba(41, 10, 15, .5); }
-.hero-title em { font-style: italic; color: var(--gold-light); }
-.hero-lede { font-family: var(--serif); font-size: clamp(1.15rem, 2.1vw, 1.45rem); color: rgba(250, 245, 234, .84); max-width: 46ch; margin-bottom: 2rem; }
+.hero-banner::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(242, 227, 180, .16);
+  border-radius: 8px;
+}
+
+.hero-stage { display: grid; }
+.hslide {
+  grid-area: 1 / 1;
+  display: grid; grid-template-columns: 1.02fr .98fr; grid-template-rows: 1fr auto;
+  align-items: center; gap: 0 clamp(1rem, 3vw, 2.5rem);
+  padding: clamp(2.2rem, 4.2vw, 3.6rem) clamp(1.5rem, 4vw, 3.4rem) 0;
+  opacity: 0; visibility: hidden; transition: opacity .55s ease;
+}
+.hslide.is-on { opacity: 1; visibility: visible; }
+
+.hslide-copy { grid-column: 1; grid-row: 1; max-width: 34ch; }
+.hslide-heb {
+  font-family: "Frank Ruhl Libre", var(--serif); font-weight: 900;
+  font-size: clamp(2.4rem, 5.6vw, 4.4rem); line-height: 1.05; margin: 0 0 .5rem;
+  color: var(--gold-light); direction: rtl;
+  text-shadow: 0 2px 30px rgba(184, 145, 47, .35);
+}
+.hslide-en {
+  font-family: var(--serif); font-weight: 600; color: var(--cream);
+  font-size: clamp(1.35rem, 2.5vw, 2rem); line-height: 1.2; margin: 0 0 .5rem;
+}
+.hslide-sub {
+  color: rgba(250, 245, 234, .74); font-size: clamp(.92rem, 1.3vw, 1.02rem);
+  line-height: 1.55; margin: 0 0 1.6rem; max-width: 40ch;
+}
+
+.btn-pill {
+  border-radius: 999px; background: var(--gold-bright); color: #2b1206;
+  border-color: var(--gold-bright); padding: 1rem 2.1rem;
+  box-shadow: 0 8px 24px -10px rgba(212, 168, 67, .8);
+}
+.btn-pill:hover { background: var(--gold-light); border-color: var(--gold-light); color: #2b1206; }
+
+.hslide-shot { grid-column: 2; grid-row: 1; position: relative; display: grid; place-items: center; min-height: clamp(230px, 30vw, 360px); }
+.hslide-shot::before {
+  content: ""; position: absolute; inset: -8%;
+  background: radial-gradient(circle at 50% 48%, rgba(240, 210, 130, .30) 0%, rgba(240, 210, 130, .12) 38%, transparent 68%);
+}
+.hslide-shot img {
+  position: relative; max-height: clamp(230px, 30vw, 360px); width: auto; max-width: 100%;
+  object-fit: contain; filter: drop-shadow(0 24px 34px rgba(0, 0, 0, .5));
+}
+
+.hslide-tag {
+  grid-column: 1 / -1; grid-row: 2; margin: clamp(1.6rem, 3vw, 2.4rem) 0 0;
+  padding: .85rem 0; border-top: 1px solid rgba(242, 227, 180, .2);
+  font-size: .72rem; letter-spacing: .17em; text-transform: uppercase;
+  color: var(--gold-light); text-align: center;
+}
+
+.hero-dots { position: absolute; right: clamp(1rem, 3vw, 2rem); top: clamp(1rem, 3vw, 1.6rem); display: flex; gap: .5rem; z-index: 3; }
+.hdot {
+  width: 9px; height: 9px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 1px solid rgba(242, 227, 180, .55); background: transparent; transition: background .2s, transform .2s;
+}
+.hdot:hover { background: rgba(242, 227, 180, .5); }
+.hdot.is-on { background: var(--gold-light); border-color: var(--gold-light); transform: scale(1.15); }
+
 .hero-cta { display: flex; flex-wrap: wrap; gap: .8rem; }
 .center-cta { justify-content: center; }
 
@@ -463,6 +523,12 @@ body.admin .table th, body.admin .table td { padding-left: .8rem; }
   .head-bar-in > span:first-child { display: none; }
   .head-bar-contact { margin-inline: auto; }
   .split, .two-col, .product, .wholesale-band { grid-template-columns: 1fr; }
+  .hslide { grid-template-columns: 1fr; grid-template-rows: auto auto auto; text-align: center; padding-top: clamp(2.6rem, 7vw, 3.4rem); }
+  .hslide-copy { grid-column: 1; grid-row: 2; max-width: none; margin-inline: auto; }
+  .hslide-sub { margin-inline: auto; }
+  .hslide-shot { grid-column: 1; grid-row: 1; margin-bottom: 1.4rem; }
+  .hslide-tag { grid-row: 3; }
+  .hero-dots { top: auto; bottom: 4.4rem; right: 50%; transform: translateX(50%); }
   .split-media { order: -1; }
   .wholesale-band img { max-height: 220px; }
   .grid { grid-template-columns: repeat(2, 1fr); }
