@@ -17,5 +17,13 @@
       "database_name": "nershava",
       "database_id": "56b440f6-07f3-42e1-bfb8-9a255be50804"
     }
+  ],
+  // Product photos the office uploads from the admin. The images that shipped
+  // with the build stay in public/assets/img/products/.
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "nershava-media"
+    }
   ]
 }

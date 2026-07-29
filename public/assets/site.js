@@ -184,7 +184,7 @@
 
         var lines = q.lines.map(function (l) {
           return '<div class="cart-item">' +
-            '<div class="cart-item-media"><img src="/assets/img/products/' + l.image +
+            '<div class="cart-item-media"><img src="' + l.image_url +
               '" alt="" width="92" height="92"></div>' +
             '<div>' +
               '<h3><a href="/product/' + l.slug + '">' + l.name + "</a></h3>" +

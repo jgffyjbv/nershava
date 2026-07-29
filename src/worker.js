@@ -12,7 +12,7 @@ const EMAIL = "office@nershava.com";
 const TAGLINE = "The beauty of Shabbos, hand-poured.";
 
 // Bump on every deploy that changes site.css or site.js so browsers pick it up.
-const ASSET_VERSION = "6";
+const ASSET_VERSION = "7";
 
 const ORDER_STATUSES = ["pending", "paid", "processing", "shipped", "cancelled"];
 const INQ_STATUSES = ["New", "Replied", "Closed"];
@@ -40,6 +40,16 @@ const redirect = (loc, extra) =>
 
 const money = (cents) =>
   "$" + (Math.round(cents || 0) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+// A product's `image` is either a filename that shipped with the build, or an
+// "r2:<key>" reference to something the office uploaded from the admin.
+const imageUrl = (image) => {
+  const v = String(image || "").trim();
+  if (!v) return "/assets/img/products/beeswax-tapers.png";
+  if (/^https?:\/\//.test(v)) return v;
+  if (v.startsWith("r2:")) return "/media/" + v.slice(3);
+  return "/assets/img/products/" + v;
+};
 
 const slugify = (s) =>
   String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -288,7 +298,7 @@ ${body}
 /* ── shared partials ───────────────────────────────────────────────────── */
 
 const productImg = (p, cls = "") =>
-  `<img class="${cls}" src="/assets/img/products/${esc(p.image || "beeswax-tapers.png")}" alt="${esc(p.name)}" loading="lazy" width="400" height="400">`;
+  `<img class="${cls}" src="${esc(imageUrl(p.image))}" alt="${esc(p.name)}" loading="lazy" width="400" height="400">`;
 
 function productCard(p) {
   return `<article class="card">
@@ -417,7 +427,7 @@ ${trustStrip()}
     <p class="lede center">From the weekly Shabbos to Yom Tov, from Havdalah to the Yahrtzeit — every candle you need, made with the same care.</p>
     <div class="collection-grid">
       ${collections.map((c) => `<a class="coll" href="/candles/${esc(c.slug)}">
-        <span class="coll-media"><img src="/assets/img/products/${esc(c.image)}" alt="" loading="lazy" width="300" height="300"></span>
+        <span class="coll-media"><img src="${esc(imageUrl(c.image))}" alt="" loading="lazy" width="300" height="300"></span>
         <span class="coll-body">
           <span class="coll-name">${esc(c.name)}</span>
           <span class="coll-blurb">${esc(c.blurb)}</span>
@@ -480,7 +490,7 @@ async function pageCollections(env) {
 <section class="wrap section">
   <div class="collection-grid lg">
     ${results.map((c) => `<a class="coll" href="/candles/${esc(c.slug)}">
-      <span class="coll-media"><img src="/assets/img/products/${esc(c.image)}" alt="" loading="lazy" width="300" height="300"></span>
+      <span class="coll-media"><img src="${esc(imageUrl(c.image))}" alt="" loading="lazy" width="300" height="300"></span>
       <span class="coll-body">
         <span class="coll-count">${c.n} ${c.n === 1 ? "product" : "products"}</span>
         <span class="coll-name">${esc(c.name)}</span>
@@ -818,7 +828,7 @@ async function quoteCart(env, items, kind = "retail", account = null) {
       unit = Math.round(unit * (100 - account.discount_pct) / 100);
     if (!unit) continue;
     lines.push({
-      slug: p.slug, id: p.id, name: p.name, sku: p.sku, image: p.image,
+      slug: p.slug, id: p.id, name: p.name, sku: p.sku, image_url: imageUrl(p.image),
       unit_label: wholesale ? `Case of ${p.case_qty}` : p.unit_label,
       unit_price_cents: unit, qty: item.qty, line_total_cents: unit * item.qty,
     });
@@ -1345,42 +1355,146 @@ async function adminOrderDetail(env, id) {
   return adminLayout(full.code, body, "/admin/orders");
 }
 
+const PRODUCT_SORTS = {
+  category: "collection, sort, name",
+  name: "name",
+  "price-low": "retail_price_cents, name",
+  "price-high": "retail_price_cents DESC, name",
+  newest: "created_at DESC, id DESC",
+};
+
 async function adminProducts(env, url) {
-  const { results } = await env.DB.prepare(
-    "SELECT * FROM products ORDER BY collection, sort").all();
+  const filter = url.searchParams.get("collection") || "";
+  const sortKey = PRODUCT_SORTS[url.searchParams.get("sort")] ? url.searchParams.get("sort") : "category";
+  const { results: collections } = await env.DB.prepare(
+    "SELECT slug, name FROM collections ORDER BY sort").all();
+  const valid = collections.some((c) => c.slug === filter);
+
+  const sql = `SELECT * FROM products ${valid ? "WHERE collection = ?" : ""} ORDER BY ${PRODUCT_SORTS[sortKey]}`;
+  const stmt = env.DB.prepare(sql);
+  const { results } = await (valid ? stmt.bind(filter) : stmt).all();
+  const total = await env.DB.prepare("SELECT COUNT(*) n FROM products").first();
   const settings = await getSettings(env);
+  const collName = Object.fromEntries(collections.map((c) => [c.slug, c.name]));
+  const qs = (over) => {
+    const p = new URLSearchParams();
+    const next = { collection: filter, sort: sortKey, ...over };
+    if (next.collection) p.set("collection", next.collection);
+    if (next.sort && next.sort !== "category") p.set("sort", next.sort);
+    const s = p.toString();
+    return "/admin/products" + (s ? "?" + s : "");
+  };
+
   const body = `
-<div class="admin-topline"><h1>Products</h1><span class="quiet">${results.length} items</span></div>
+<div class="admin-topline">
+  <h1>Products</h1>
+  <span class="quiet">${results.length}${valid ? ` of ${total.n}` : ""} items</span>
+  <a class="btn btn-gold btn-sm push-right" href="/admin/products/new">+ Add a product</a>
+</div>
 ${settings.pricesProvisional ? `<div class="notice warn"><strong>Prices are provisional.</strong> The figures below are placeholders put in when the site was built — confirm every retail and case price with the office, then switch this warning off under <a href="/admin/settings">Settings</a>.</div>` : ""}
 ${url.searchParams.get("saved") ? `<div class="notice ok">Saved.</div>` : ""}
+${url.searchParams.get("added") ? `<div class="notice ok">Product added.</div>` : ""}
+${url.searchParams.get("deleted") ? `<div class="notice ok">Product deleted.</div>` : ""}
+
+<div class="toolbar">
+  <p class="filters">
+    <a href="${qs({ collection: "" })}"${!valid ? ' class="on"' : ""}>All categories</a>
+    ${collections.map((c) => `<a href="${qs({ collection: c.slug })}"${filter === c.slug ? ' class="on"' : ""}>${esc(c.name)}</a>`).join("")}
+    <a href="/admin/collections" class="ghosty">Manage categories →</a>
+  </p>
+  <p class="sorter">
+    <span class="quiet">Sort</span>
+    ${[["category", "Category"], ["name", "Name"], ["price-low", "Price ↑"], ["price-high", "Price ↓"], ["newest", "Newest"]]
+      .map(([k, l]) => `<a href="${qs({ sort: k })}"${sortKey === k ? ' class="on"' : ""}>${l}</a>`).join("")}
+  </p>
+</div>
+
 <table class="table compact">
-<thead><tr><th>Product</th><th>Item #</th><th>Retail</th><th>Case qty</th><th>Case price</th><th>Live</th><th></th></tr></thead>
+<thead><tr><th></th><th>Product</th><th>Item #</th><th>Retail</th><th>Case qty</th><th>Case price</th><th>Live</th><th></th></tr></thead>
 <tbody>${results.map((p) => `<tr>
-  <td data-label="Product"><strong>${esc(p.name)}</strong><br><small class="quiet">${esc(p.collection)}</small></td>
+  <td data-label=""><img class="row-thumb" src="${esc(imageUrl(p.image))}" alt="" loading="lazy" width="46" height="46"></td>
+  <td data-label="Product"><strong>${esc(p.name)}</strong><br><small class="quiet">${esc(collName[p.collection] || p.collection)}</small></td>
   <td data-label="Item #"><small class="quiet">${esc(p.sku || "—")}</small></td>
   <td data-label="Retail">${money(p.retail_price_cents)}</td>
   <td data-label="Case qty">${p.case_qty}</td>
   <td data-label="Case price">${money(p.wholesale_price_cents)}</td>
   <td data-label="Live">${p.retail_active ? "Shop" : ""}${p.retail_active && p.wholesale_active ? " · " : ""}${p.wholesale_active ? "Wholesale" : ""}${!p.retail_active && !p.wholesale_active ? "<span class='quiet'>hidden</span>" : ""}</td>
   <td data-label=""><a class="btn btn-sm btn-outline" href="/admin/products/${p.id}">Edit</a></td>
-</tr>`).join("")}</tbody></table>`;
+</tr>`).join("") || `<tr><td colspan="8" class="quiet">No products in this category yet.</td></tr>`}</tbody></table>`;
   return adminLayout("Products", body, "/admin/products");
 }
 
+async function adminCollections(env, url) {
+  const { results } = await env.DB.prepare(`
+    SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.collection = c.slug) AS n
+    FROM collections c ORDER BY c.sort`).all();
+  const msg = url.searchParams.get("msg");
+  const body = `
+<div class="admin-topline"><h1>Categories</h1><span class="quiet">${results.length} categories</span></div>
+${msg ? `<div class="notice ${url.searchParams.get("bad") ? "bad" : "ok"}">${esc(msg)}</div>` : ""}
+<p class="quiet">Categories are the collections shoppers browse. The lower the sort number, the earlier it appears. A category has to be empty before it can be deleted.</p>
+<table class="table">
+<thead><tr><th></th><th>Category</th><th>Blurb</th><th>Products</th><th>Sort</th><th></th></tr></thead>
+<tbody>${results.map((c) => `<tr>
+  <td data-label=""><img class="row-thumb" src="${esc(imageUrl(c.image))}" alt="" loading="lazy" width="46" height="46"></td>
+  <td data-label="Category"><strong>${esc(c.name)}</strong><br><small class="quiet">/candles/${esc(c.slug)}</small></td>
+  <td data-label="Blurb"><small class="quiet">${esc(c.blurb || "—")}</small></td>
+  <td data-label="Products">${c.n}</td>
+  <td data-label="Sort">${c.sort}</td>
+  <td data-label="">
+    <details class="rowform"><summary class="btn btn-sm btn-outline">Edit</summary>
+      <form class="form" method="post" action="/admin/collections">
+        <input type="hidden" name="slug" value="${esc(c.slug)}">
+        <label>Name<input name="name" value="${esc(c.name)}" required></label>
+        <label>Blurb<input name="blurb" value="${esc(c.blurb || "")}"></label>
+        <div class="row">
+          <label>Image file<input name="image" value="${esc(c.image || "")}"></label>
+          <label>Sort<input name="sort" value="${c.sort}" inputmode="numeric"></label>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-gold btn-sm" type="submit">Save</button>
+          ${c.n === 0 ? `<button class="btn btn-sm btn-danger" type="submit" name="action" value="delete"
+            onclick="return confirm('Delete the ${esc(c.name)} category?')">Delete</button>` : ""}
+        </div>
+      </form>
+    </details>
+  </td>
+</tr>`).join("")}</tbody></table>
+
+<h2 class="mt">Add a category</h2>
+<form class="form panel narrow" method="post" action="/admin/collections">
+  <label>Name <span class="req">*</span><input name="name" required placeholder="e.g. Neronim"></label>
+  <label>Blurb<input name="blurb" placeholder="One line shown under the category name"></label>
+  <div class="row">
+    <label>Image file<input name="image" placeholder="e.g. tealights.png"></label>
+    <label>Sort<input name="sort" value="${results.length + 1}" inputmode="numeric"></label>
+  </div>
+  <button class="btn btn-gold" type="submit">Add category</button>
+</form>`;
+  return adminLayout("Categories", body, "/admin/products");
+}
+
+// Renders the create form when `p` is null, otherwise the edit form.
 async function adminProductDetail(env, id) {
-  const p = await env.DB.prepare("SELECT * FROM products WHERE id = ?").bind(id).first();
+  const isNew = id === "new";
+  const p = isNew
+    ? { id: 0, name: "", sku: "", collection: "", blurb: "", description: "", unit_label: "",
+        burn_time: "", retail_price_cents: 0, case_qty: 1, wholesale_price_cents: 0,
+        image: "", sort: 0, retail_active: 1, wholesale_active: 1, featured: 0, slug: "" }
+    : await env.DB.prepare("SELECT * FROM products WHERE id = ?").bind(id).first();
   if (!p) return null;
   const { results: collections } = await env.DB.prepare(
     "SELECT slug, name FROM collections ORDER BY sort").all();
+  const action = isNew ? "/admin/products/new" : `/admin/products/${p.id}`;
   const body = `
 <p class="crumb"><a href="/admin/products">← Products</a></p>
-<h1>${esc(p.name)}</h1>
+<h1>${isNew ? "Add a product" : esc(p.name)}</h1>
 <div class="admin-cols">
-  <form class="form panel" method="post" action="/admin/products/${p.id}">
+  <form class="form panel" method="post" action="${action}" enctype="multipart/form-data">
     <label>Name<input name="name" value="${esc(p.name)}" required></label>
     <div class="row">
       <label>Item number<input name="sku" value="${esc(p.sku || "")}"></label>
-      <label>Collection<select name="collection">${collections.map((c) =>
+      <label>Category<select name="collection" required>${isNew ? '<option value="">Choose…</option>' : ""}${collections.map((c) =>
         `<option value="${esc(c.slug)}"${c.slug === p.collection ? " selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>
     </div>
     <label>Short blurb<input name="blurb" value="${esc(p.blurb || "")}"></label>
@@ -1394,8 +1508,10 @@ async function adminProductDetail(env, id) {
       <label>Units per case<input name="case_qty" value="${p.case_qty}" inputmode="numeric"></label>
       <label>Case price ($)<input name="wholesale_price" value="${(p.wholesale_price_cents / 100).toFixed(2)}" inputmode="decimal"></label>
     </div>
+    <label>Photo<input type="file" name="photo" accept="image/*"></label>
+    <p class="fineprint quiet">Choose a JPG, PNG or WebP and it will be uploaded when you save. A photo on a plain white background works best.</p>
     <div class="row">
-      <label>Image file<input name="image" value="${esc(p.image || "")}"></label>
+      <label>Or an existing image file<input name="image" value="${esc(p.image || "")}" placeholder="e.g. tealights.png"></label>
       <label>Sort order<input name="sort" value="${p.sort}" inputmode="numeric"></label>
     </div>
     <div class="checks">
@@ -1403,16 +1519,50 @@ async function adminProductDetail(env, id) {
       <label class="check"><input type="checkbox" name="wholesale_active"${p.wholesale_active ? " checked" : ""}> Offer to wholesale</label>
       <label class="check"><input type="checkbox" name="featured"${p.featured ? " checked" : ""}> Feature on the home page</label>
     </div>
-    <button class="btn btn-gold" type="submit">Save product</button>
+    <button class="btn btn-gold" type="submit">${isNew ? "Add product" : "Save product"}</button>
   </form>
   <aside class="panel">
-    <h3>Preview</h3>
-    <img class="admin-thumb" src="/assets/img/products/${esc(p.image || "")}" alt="">
-    <p class="quiet fineprint">Images live in <code>public/assets/img/products/</code>. Upload a new file there and put its filename in the image field.</p>
-    <p><a class="btn btn-sm btn-outline" href="/product/${esc(p.slug)}" target="_blank" rel="noopener">View on site</a></p>
+    <h3>Photo</h3>
+    <img class="admin-thumb" src="${esc(imageUrl(p.image))}" alt="">
+    <p class="quiet fineprint">Uploaded photos are stored on Cloudflare and go live as soon as you save — no developer needed.</p>
+    ${isNew ? "" : `
+    <h3>On the site</h3>
+    <p><a class="btn btn-sm btn-outline" href="/product/${esc(p.slug)}" target="_blank" rel="noopener">View product page</a></p>
+    <h3>Remove</h3>
+    <p class="quiet fineprint">Unticking both boxes above hides a product without losing it. Deleting is permanent; past orders keep their own record either way.</p>
+    <form method="post" action="/admin/products/${p.id}/delete"
+          onsubmit="return confirm('Permanently delete ${esc(p.name).replace(/'/g, "\\'")}?')">
+      <button class="btn btn-sm btn-danger" type="submit">Delete product</button>
+    </form>`}
   </aside>
 </div>`;
-  return adminLayout(p.name, body, "/admin/products");
+  return adminLayout(isNew ? "Add a product" : p.name, body, "/admin/products");
+}
+
+// Saves an uploaded photo to R2 and returns an "r2:<key>" reference.
+async function storePhoto(env, file, slugHint) {
+  if (!file || typeof file === "string" || !file.size) return null;
+  if (!env.MEDIA) return null;
+  if (file.size > 6 * 1024 * 1024) throw new Error("That photo is larger than 6 MB.");
+  const type = file.type || "application/octet-stream";
+  if (!/^image\/(jpeg|png|webp|gif|avif)$/.test(type)) throw new Error("Please upload a JPG, PNG, WebP, GIF or AVIF.");
+  const ext = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+                "image/gif": "gif", "image/avif": "avif" }[type];
+  const rand = [...crypto.getRandomValues(new Uint8Array(4))]
+    .map((b) => b.toString(16).padStart(2, "0")).join("");
+  const key = `${slugify(slugHint) || "product"}-${rand}.${ext}`;
+  await env.MEDIA.put(key, file.stream(), { httpMetadata: { contentType: type } });
+  return "r2:" + key;
+}
+
+async function uniqueSlug(env, base) {
+  const root = slugify(base) || "product";
+  for (let i = 0; i < 50; i++) {
+    const candidate = i === 0 ? root : `${root}-${i + 1}`;
+    const hit = await env.DB.prepare("SELECT 1 FROM products WHERE slug = ?").bind(candidate).first();
+    if (!hit) return candidate;
+  }
+  return `${root}-${Date.now()}`;
 }
 
 async function adminWholesale(env, url) {
@@ -1539,6 +1689,21 @@ export default {
         return json({ lines: q.lines, subtotal: q.subtotal, shipping: q.shipping, total: q.total,
           freeShipOver: q.settings?.freeShipOver ?? 0 });
       }
+      // Photos the office uploaded from the admin, served straight out of R2.
+      if (path.startsWith("/media/")) {
+        const key = decodeURIComponent(path.slice(7));
+        if (!env.MEDIA || !key || key.includes("..")) return notFound();
+        const object = await env.MEDIA.get(key);
+        if (!object) return notFound();
+        return new Response(object.body, {
+          headers: {
+            "Content-Type": object.httpMetadata?.contentType || "application/octet-stream",
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "ETag": object.httpEtag,
+          },
+        });
+      }
+
       if (path === "/api/checkout" && method === "POST") return apiCheckout(req, env, url);
       if (path === "/api/wholesale/terms" && method === "POST") return apiWholesaleTerms(req, env);
       if (path === "/api/webhooks/stripe" && method === "POST") return stripeWebhook(req, env, ctx);
@@ -1578,20 +1743,84 @@ export default {
         }
 
         if (path === "/admin/products") return html(await adminProducts(env, url));
-        const prodMatch = path.match(/^\/admin\/products\/(\d+)$/);
+
+        if (path === "/admin/collections") {
+          if (method === "POST") {
+            const f = await formBody(req);
+            const sort = parseInt(f.sort, 10) || 0;
+            if (f.slug) {
+              if (f.action === "delete") {
+                const inUse = await env.DB.prepare(
+                  "SELECT COUNT(*) n FROM products WHERE collection = ?").bind(f.slug).first();
+                if (inUse.n > 0)
+                  return redirect("/admin/collections?bad=1&msg=" +
+                    encodeURIComponent(`That category still has ${inUse.n} product(s) in it.`));
+                await env.DB.prepare("DELETE FROM collections WHERE slug = ?").bind(f.slug).run();
+                return redirect("/admin/collections?msg=Category+deleted");
+              }
+              await env.DB.prepare(
+                "UPDATE collections SET name=?, blurb=?, image=?, sort=? WHERE slug=?")
+                .bind(f.name, f.blurb || null, f.image || null, sort, f.slug).run();
+              return redirect("/admin/collections?msg=Category+saved");
+            }
+            if (!f.name) return redirect("/admin/collections?bad=1&msg=A+name+is+required");
+            const slug = slugify(f.name);
+            const clash = await env.DB.prepare("SELECT 1 FROM collections WHERE slug = ?").bind(slug).first();
+            if (clash) return redirect("/admin/collections?bad=1&msg=A+category+with+that+name+already+exists");
+            await env.DB.prepare(
+              "INSERT INTO collections (slug, name, blurb, image, sort) VALUES (?,?,?,?,?)")
+              .bind(slug, f.name, f.blurb || null, f.image || null, sort).run();
+            return redirect("/admin/collections?msg=Category+added");
+          }
+          return html(await adminCollections(env, url));
+        }
+
+        const delMatch = path.match(/^\/admin\/products\/(\d+)\/delete$/);
+        if (delMatch && method === "POST") {
+          await env.DB.prepare("DELETE FROM products WHERE id = ?").bind(delMatch[1]).run();
+          return redirect("/admin/products?deleted=1");
+        }
+
+        const prodMatch = path.match(/^\/admin\/products\/(\d+|new)$/);
         if (prodMatch) {
+          const isNew = prodMatch[1] === "new";
           if (method === "POST") {
             const f = await formBody(req);
             const cents = (v) => Math.max(0, Math.round(parseFloat(String(v).replace(/[^0-9.]/g, "")) * 100) || 0);
+            if (!f.name || !f.collection)
+              return html(adminLayout("Add a product",
+                `<div class="notice bad">A name and a category are both required. <a href="/admin/products/${prodMatch[1]}">Go back</a>.</div>`,
+                "/admin/products"), 400);
+
+            let image = f.image || null;
+            try {
+              const uploaded = await storePhoto(env, f.photo, f.name);
+              if (uploaded) image = uploaded;
+            } catch (err) {
+              return html(adminLayout("Photo problem",
+                `<div class="notice bad">${esc(String(err.message || err))} <a href="/admin/products/${prodMatch[1]}">Go back</a>.</div>`,
+                "/admin/products"), 400);
+            }
+
+            const fields = [f.name, f.sku || null, f.collection, f.blurb || null, f.description || null,
+              f.unit_label || null, f.burn_time || null, cents(f.retail_price),
+              Math.max(1, parseInt(f.case_qty, 10) || 1), cents(f.wholesale_price),
+              image, parseInt(f.sort, 10) || 0,
+              f.retail_active ? 1 : 0, f.wholesale_active ? 1 : 0, f.featured ? 1 : 0];
+
+            if (isNew) {
+              await env.DB.prepare(`INSERT INTO products
+                (name, sku, collection, blurb, description, unit_label, burn_time,
+                 retail_price_cents, case_qty, wholesale_price_cents, image, sort,
+                 retail_active, wholesale_active, featured, slug)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+                .bind(...fields, await uniqueSlug(env, f.name)).run();
+              return redirect("/admin/products?added=1");
+            }
             await env.DB.prepare(`UPDATE products SET name=?, sku=?, collection=?, blurb=?, description=?,
               unit_label=?, burn_time=?, retail_price_cents=?, case_qty=?, wholesale_price_cents=?,
               image=?, sort=?, retail_active=?, wholesale_active=?, featured=? WHERE id=?`)
-              .bind(f.name, f.sku || null, f.collection, f.blurb || null, f.description || null,
-                f.unit_label || null, f.burn_time || null, cents(f.retail_price),
-                Math.max(1, parseInt(f.case_qty, 10) || 1), cents(f.wholesale_price),
-                f.image || null, parseInt(f.sort, 10) || 0,
-                f.retail_active ? 1 : 0, f.wholesale_active ? 1 : 0, f.featured ? 1 : 0,
-                prodMatch[1]).run();
+              .bind(...fields, prodMatch[1]).run();
             return redirect("/admin/products?saved=1");
           }
           const page = await adminProductDetail(env, prodMatch[1]);

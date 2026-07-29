@@ -22,8 +22,9 @@ Four things are outstanding, all of them needing something from the client:
    but silently skipped until `RESEND_API_KEY` is set.
 4. **Product photos.** The images are extracted from the PDF catalog — real
    product photography, but low resolution. David said he is sending better
-   ones. Drop replacements into `public/assets/img/products/` using the same
-   filenames and redeploy; no code change needed.
+   ones. Either upload them from `/admin/products` (stored in R2, live on
+   save) or drop replacements into `public/assets/img/products/` under the
+   same filenames and redeploy.
 
 ---
 
@@ -98,6 +99,14 @@ optional account discount and terms. The store then logs in at
 `/wholesale/login` and gets a case-price order form. Accounts on "card" pay via
 Stripe; accounts on Net 30 place the order on account and the office is
 emailed. Freight is quoted separately and is deliberately not calculated.
+
+**Catalog admin.** `/admin/products` filters by category and sorts by
+category, name, price or newest. Products can be added, edited and deleted,
+and a photo uploaded on the same form — it goes to the `nershava-media` R2
+bucket and is served from `/media/<key>`. A product's `image` column is either
+a filename that shipped with the build or an `r2:<key>` reference; `imageUrl()`
+resolves both. `/admin/collections` adds, renames and reorders categories, and
+refuses to delete one that still has products in it.
 
 **Settings** (`/admin/settings`): flat shipping, free-shipping threshold,
 wholesale minimum.
