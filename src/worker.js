@@ -12,7 +12,7 @@ const EMAIL = "office@nershava.com";
 const TAGLINE = "The beauty of Shabbos, hand-poured.";
 
 // Bump on every deploy that changes site.css or site.js so browsers pick it up.
-const ASSET_VERSION = "8";
+const ASSET_VERSION = "10";
 
 const ORDER_STATUSES = ["pending", "paid", "processing", "shipped", "cancelled"];
 const INQ_STATUSES = ["New", "Replied", "Closed"];
@@ -330,7 +330,7 @@ const trustStrip = () => `<section class="trust">
 // they arrive; nothing else needs to change.
 const HERO_SLIDES = [
   {
-    bg: "hero-collection.jpg",
+    bg: "hero-candles-shabbos.jpg",
     heb: "וואקסענע שבת ליכט",
     en: "Handmade from 100% pure beeswax.",
     sub: "The candle that makes the Shabbos table glow the way it was meant to.",
@@ -339,7 +339,7 @@ const HERO_SLIDES = [
     tag: "Burns 4, 5 or 7 hours · Smokeless &amp; dripless",
   },
   {
-    bg: "hero-collection.jpg",
+    bg: "hero-candles-havdalah.jpg",
     heb: "הבדלה ליכט",
     en: "The braided flame that carries Shabbos out.",
     sub: "Hand-braided pure beeswax, with the wide flame the bracha calls for.",
@@ -348,7 +348,7 @@ const HERO_SLIDES = [
     tag: "Hand-braided · 100% pure beeswax",
   },
   {
-    bg: "hero-collection.jpg",
+    bg: "hero-candles-neshuma.jpg",
     heb: "נר נשמה",
     en: "A light that burns steady and true.",
     sub: "Twenty-six hours, forty-eight, seventy-two — or a full week.",
@@ -362,7 +362,7 @@ function heroBanner() {
   const slides = HERO_SLIDES.map((s, i) => `
     <article class="hslide${i === 0 ? " is-on" : ""}" data-hslide="${i}"${i ? ' aria-hidden="true"' : ""}>
       <div class="hslide-bg" aria-hidden="true">
-        <img src="/assets/img/${s.bg}" alt=""${i === 0 ? '' : ' loading="lazy"'} width="1038" height="1200">
+        <img src="/assets/img/${s.bg}" alt=""${i === 0 ? '' : ' loading="lazy"'} width="1536" height="1024">
       </div>
       <div class="hslide-copy">
         <p class="hslide-heb" lang="he" dir="rtl">${s.heb}</p>
@@ -371,9 +371,6 @@ function heroBanner() {
           : `<h2 class="hslide-en">${s.en}</h2>`}
         <p class="hslide-sub">${esc(s.sub)}</p>
         <a class="btn btn-pill" href="${s.cta[1]}"${i ? ' tabindex="-1"' : ""}>${esc(s.cta[0])}</a>
-      </div>
-      <div class="hslide-shot">
-        <img src="/assets/img/products/${s.img}" alt=""${i === 0 ? "" : ' loading="lazy"'} width="600" height="600">
       </div>
       <p class="hslide-tag">${s.tag}</p>
     </article>`).join("");
