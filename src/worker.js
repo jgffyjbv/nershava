@@ -12,7 +12,7 @@ const EMAIL = "office@nershava.com";
 const TAGLINE = "The beauty of Shabbos, hand-poured.";
 
 // Bump on every deploy that changes site.css or site.js so browsers pick it up.
-const ASSET_VERSION = "7";
+const ASSET_VERSION = "8";
 
 const ORDER_STATUSES = ["pending", "paid", "processing", "shipped", "cancelled"];
 const INQ_STATUSES = ["New", "Replied", "Closed"];
@@ -323,10 +323,14 @@ const trustStrip = () => `<section class="trust">
   </div>
 </section>`;
 
-// Hero banner slides. Each is a poster: Hebrew display line, English promise,
-// the product shot as the centrepiece, and a spec strip along the bottom.
+// Hero banner slides. Each is a poster: a slowly zooming photograph behind,
+// Hebrew display line and English promise over it, the product shot as the
+// centrepiece, and a spec strip along the bottom.
+// `bg` is the photograph — swap these for wider, higher-resolution shots when
+// they arrive; nothing else needs to change.
 const HERO_SLIDES = [
   {
+    bg: "hero-collection.jpg",
     heb: "וואקסענע שבת ליכט",
     en: "Handmade from 100% pure beeswax.",
     sub: "The candle that makes the Shabbos table glow the way it was meant to.",
@@ -335,6 +339,7 @@ const HERO_SLIDES = [
     tag: "Burns 4, 5 or 7 hours · Smokeless &amp; dripless",
   },
   {
+    bg: "hero-collection.jpg",
     heb: "הבדלה ליכט",
     en: "The braided flame that carries Shabbos out.",
     sub: "Hand-braided pure beeswax, with the wide flame the bracha calls for.",
@@ -343,6 +348,7 @@ const HERO_SLIDES = [
     tag: "Hand-braided · 100% pure beeswax",
   },
   {
+    bg: "hero-collection.jpg",
     heb: "נר נשמה",
     en: "A light that burns steady and true.",
     sub: "Twenty-six hours, forty-eight, seventy-two — or a full week.",
@@ -355,6 +361,9 @@ const HERO_SLIDES = [
 function heroBanner() {
   const slides = HERO_SLIDES.map((s, i) => `
     <article class="hslide${i === 0 ? " is-on" : ""}" data-hslide="${i}"${i ? ' aria-hidden="true"' : ""}>
+      <div class="hslide-bg" aria-hidden="true">
+        <img src="/assets/img/${s.bg}" alt=""${i === 0 ? '' : ' loading="lazy"'} width="1038" height="1200">
+      </div>
       <div class="hslide-copy">
         <p class="hslide-heb" lang="he" dir="rtl">${s.heb}</p>
         ${i === 0
