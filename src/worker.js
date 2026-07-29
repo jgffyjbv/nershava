@@ -12,7 +12,7 @@ const EMAIL = "office@nershava.com";
 const TAGLINE = "The beauty of Shabbos, hand-poured.";
 
 // Bump on every deploy that changes site.css or site.js so browsers pick it up.
-const ASSET_VERSION = "10";
+const ASSET_VERSION = "12";
 
 const ORDER_STATUSES = ["pending", "paid", "processing", "shipped", "cancelled"];
 const INQ_STATUSES = ["New", "Replied", "Closed"];
@@ -364,15 +364,17 @@ function heroBanner() {
       <div class="hslide-bg" aria-hidden="true">
         <img src="/assets/img/${s.bg}" alt=""${i === 0 ? '' : ' loading="lazy"'} width="1536" height="1024">
       </div>
-      <div class="hslide-copy">
-        <p class="hslide-heb" lang="he" dir="rtl">${s.heb}</p>
-        ${i === 0
-          ? `<h1 class="hslide-en">${s.en}</h1>`
-          : `<h2 class="hslide-en">${s.en}</h2>`}
-        <p class="hslide-sub">${esc(s.sub)}</p>
-        <a class="btn btn-pill" href="${s.cta[1]}"${i ? ' tabindex="-1"' : ""}>${esc(s.cta[0])}</a>
+      <div class="hslide-body wrap">
+        <div class="hslide-copy">
+          <p class="hslide-heb" lang="he" dir="rtl">${s.heb}</p>
+          ${i === 0
+            ? `<h1 class="hslide-en">${s.en}</h1>`
+            : `<h2 class="hslide-en">${s.en}</h2>`}
+          <p class="hslide-sub">${esc(s.sub)}</p>
+          <a class="btn btn-pill" href="${s.cta[1]}"${i ? ' tabindex="-1"' : ""}>${esc(s.cta[0])}</a>
+        </div>
       </div>
-      <p class="hslide-tag">${s.tag}</p>
+      <div class="hslide-foot wrap"><p class="hslide-tag">${s.tag}</p></div>
     </article>`).join("");
 
   const dots = HERO_SLIDES.map((s, i) =>
@@ -380,11 +382,9 @@ function heroBanner() {
        aria-label="Show ${esc(s.cta[0]).replace(/^Shop /, "")}"${i === 0 ? ' aria-current="true"' : ""}></button>`).join("");
 
   return `<section class="hero">
-  <div class="wrap">
-    <div class="hero-banner" data-hero aria-roledescription="carousel" aria-label="Ner Shava candles">
-      <div class="hero-stage">${slides}</div>
-      <div class="hero-dots">${dots}</div>
-    </div>
+  <div class="hero-banner" data-hero aria-roledescription="carousel" aria-label="Ner Shava candles">
+    <div class="hero-stage">${slides}</div>
+    <div class="hero-dots">${dots}</div>
   </div>
 </section>`;
 }
