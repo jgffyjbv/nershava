@@ -12,7 +12,7 @@ const EMAIL = "office@nershava.com";
 const TAGLINE = "The beauty of Shabbos, hand-poured.";
 
 // Bump on every deploy that changes site.css or site.js so browsers pick it up.
-const ASSET_VERSION = "12";
+const ASSET_VERSION = "13";
 
 const ORDER_STATUSES = ["pending", "paid", "processing", "shipped", "cancelled"];
 const INQ_STATUSES = ["New", "Replied", "Closed"];
@@ -194,7 +194,7 @@ function layout({ title, description, body, path = "/", bodyClass = "", head = "
 <link rel="icon" href="/assets/img/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Frank+Ruhl+Libre:wght@500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Frank+Ruhl+Libre:wght@500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/site.css?v=${ASSET_VERSION}">
 ${head}
 </head>
@@ -330,51 +330,54 @@ const trustStrip = () => `<section class="trust">
 // they arrive; nothing else needs to change.
 const HERO_SLIDES = [
   {
-    bg: "hero-candles-shabbos.jpg",
+    bg: "hero-scene-shabbos.jpg",
+    alt: "A fully set Shabbos table with Ner Shava candles burning in silver leichter",
     heb: "וואקסענע שבת ליכט",
-    en: "Handmade from 100% pure beeswax.",
-    sub: "The candle that makes the Shabbos table glow the way it was meant to.",
+    en: "The Shabbos table, the way it was meant to glow.",
+    sub: "Handmade from 100% pure beeswax — smokeless, dripless, and clean to the last hour.",
     cta: ["Shop Shabbos candles", "/candles/beeswax-shabbos"],
-    img: "beeswax-shabbos-7hr.png",
-    tag: "Burns 4, 5 or 7 hours · Smokeless &amp; dripless",
+    chips: ["100% Pure Beeswax", "Smokeless & Dripless"],
   },
   {
-    bg: "hero-candles-havdalah.jpg",
+    bg: "hero-scene-havdalah.jpg",
+    alt: "A braided Ner Shava havdalah candle burning over a set melaveh malka table",
     heb: "הבדלה ליכט",
     en: "The braided flame that carries Shabbos out.",
-    sub: "Hand-braided pure beeswax, with the wide flame the bracha calls for.",
+    sub: "Hand-braided pure beeswax with the wide flame the bracha calls for — no smoke, no drips.",
     cta: ["Shop havdalah", "/candles/havdalah-chupah"],
-    img: "havdalah-braided.png",
-    tag: "Hand-braided · 100% pure beeswax",
+    chips: ["Hand-Braided", "100% Pure Beeswax"],
   },
   {
-    bg: "hero-candles-neshuma.jpg",
+    bg: "hero-scene-neshuma.jpg",
+    alt: "A Ner Shava memorial candle burning in glass",
     heb: "נר נשמה",
     en: "A light that burns steady and true.",
-    sub: "Twenty-six hours, forty-eight, seventy-two — or a full week.",
+    sub: "Twenty-six hours, forty-eight, seventy-two — or a full week. Lit once, trusted to the end.",
     cta: ["Shop yahrtzeit", "/candles/yahrtzeit"],
-    img: "yahrtzeit-7day.png",
-    tag: "26 hr · 48 hr · 72 hr · 7 day",
+    chips: ["26 hr – 7 day", "Steady Glass Flame"],
   },
 ];
 
 function heroBanner() {
+  // Sprout-style split hero on white: the scene photograph sits left in a
+  // rounded frame (still slowly zooming), the copy sits right.
   const slides = HERO_SLIDES.map((s, i) => `
     <article class="hslide${i === 0 ? " is-on" : ""}" data-hslide="${i}"${i ? ' aria-hidden="true"' : ""}>
-      <div class="hslide-bg" aria-hidden="true">
-        <img src="/assets/img/${s.bg}" alt=""${i === 0 ? '' : ' loading="lazy"'} width="1536" height="1024">
+      <div class="hslide-photo">
+        <img src="/assets/img/${s.bg}" alt="${esc(s.alt)}"${i === 0 ? "" : ' loading="lazy"'} width="1536" height="1024">
       </div>
-      <div class="hslide-body wrap">
-        <div class="hslide-copy">
-          <p class="hslide-heb" lang="he" dir="rtl">${s.heb}</p>
-          ${i === 0
-            ? `<h1 class="hslide-en">${s.en}</h1>`
-            : `<h2 class="hslide-en">${s.en}</h2>`}
-          <p class="hslide-sub">${esc(s.sub)}</p>
+      <div class="hslide-copy">
+        <p class="hslide-chips">${s.chips.map((c) => `<span class="chip">${c}</span>`).join("")}</p>
+        <p class="hslide-heb" lang="he" dir="rtl">${s.heb}</p>
+        ${i === 0
+          ? `<h1 class="hslide-en">${s.en}</h1>`
+          : `<h2 class="hslide-en">${s.en}</h2>`}
+        <p class="hslide-sub">${esc(s.sub)}</p>
+        <p class="hslide-ctas">
           <a class="btn btn-pill" href="${s.cta[1]}"${i ? ' tabindex="-1"' : ""}>${esc(s.cta[0])}</a>
-        </div>
+          <a class="btn btn-pill-outline" href="/wholesale"${i ? ' tabindex="-1"' : ""}>Wholesale</a>
+        </p>
       </div>
-      <div class="hslide-foot wrap"><p class="hslide-tag">${s.tag}</p></div>
     </article>`).join("");
 
   const dots = HERO_SLIDES.map((s, i) =>
@@ -382,7 +385,7 @@ function heroBanner() {
        aria-label="Show ${esc(s.cta[0]).replace(/^Shop /, "")}"${i === 0 ? ' aria-current="true"' : ""}></button>`).join("");
 
   return `<section class="hero">
-  <div class="hero-banner" data-hero aria-roledescription="carousel" aria-label="Ner Shava candles">
+  <div class="wrap hero-banner" data-hero aria-roledescription="carousel" aria-label="Ner Shava candles">
     <div class="hero-stage">${slides}</div>
     <div class="hero-dots">${dots}</div>
   </div>
