@@ -12,7 +12,7 @@ const EMAIL = "office@nershava.com";
 const TAGLINE = "The beauty of Shabbos, hand-poured.";
 
 // Bump on every deploy that changes site.css or site.js so browsers pick it up.
-const ASSET_VERSION = "13";
+const ASSET_VERSION = "14";
 
 const ORDER_STATUSES = ["pending", "paid", "processing", "shipped", "cancelled"];
 const INQ_STATUSES = ["New", "Replied", "Closed"];
