@@ -86,6 +86,15 @@ it against production once real orders exist.
 
 ---
 
+## Yiddish edition
+
+`?lang=yi` flips the storefront to RTL Yiddish (remembered in the
+`ns_lang` cookie; toggle in the top bar). English renders first, then
+`translateYi()` in `src/worker.js` rewrites the finished HTML through the
+`YI` phrase table, longest phrase first. To fix or add a translation, edit
+that table — anything unmapped simply stays English. Cart strings reach the
+browser as `window.NS_STR`. Policy pages and the admin remain English.
+
 ## How it works
 
 **Retail.** Cart lives in `localStorage`. Every price is re-quoted server-side
