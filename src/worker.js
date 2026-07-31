@@ -128,8 +128,10 @@ const YI = [
 
   ["Ten collections, each made with the same care.", "צען קאלעקציעס, יעדע געמאכט מיט די זעלבע זארג."],
   ["Every candle Ner Shava makes — organised so you can find what your table, your shul or your customers need.", "יעדעס ליכט וואס נר שעוה מאכט — סדר׳דיג צוגעשטעלט איר זאלט טרעפן וואס אייער טיש, אייער שול אדער אייערע קונים דארפן."],
-  ["products", "פראדוקטן"],
-  ["product", "פראדוקט"],
+  // NOTE: never add a bare lowercase word that can occur inside a URL, slug
+  // or class name (e.g. "product", "cart") — the phrase pass would rewrite
+  // those too. The "N products" count label is handled by regex in
+  // translateYi() instead.
   ["Add to cart", "לייגט אריין אין וואגן"],
   ["Add", "לייגט אריין"],
   ["Qty", "צאל"],
@@ -332,7 +334,11 @@ const YI_CART = {
 function translateYi(markup) {
   let out = markup
     .replace('<html lang="en">', '<html lang="yi" dir="rtl">')
-    .replace(/<body class="/, '<body class="yi ');
+    .replace(/<body class="/, '<body class="yi ')
+    // the "N products" count label — bounded by tags so URLs and class
+    // names that contain the word "product" are never touched
+    .replace(/>(\d+) products</g, ">$1 פראדוקטן<")
+    .replace(/>(\d+) product</g, ">$1 פראדוקט<");
   for (const [en, yi] of YI_SORTED) {
     if (out.includes(en)) out = out.split(en).join(yi);
     const escaped = esc(en);
