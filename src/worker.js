@@ -12,7 +12,338 @@ const EMAIL = "office@nershava.com";
 const TAGLINE = "The beauty of Shabbos, hand-poured.";
 
 // Bump on every deploy that changes site.css or site.js so browsers pick it up.
-const ASSET_VERSION = "14";
+const ASSET_VERSION = "15";
+
+/* ── i18n: Yiddish ──────────────────────────────────────────────────────
+   The site renders in English; for lang=yi the finished HTML goes through
+   an exact-phrase translation pass (longest phrase first, escaped variants
+   included), the document flips to RTL, and the cart strings are injected
+   for site.js. Anything without a translation stays English rather than
+   breaking. Yiddish copy uses ׳ and ״ (geresh/gershayim), never ' or ", so
+   a replacement can never terminate an HTML attribute early. */
+
+const YI = [
+  ["Est. Mountainville, NY · Handmade in the USA", "מאונטענוויל, נ.י. · האנט געמאכט אין אמעריקע"],
+  ["Our Candles", "אונזערע ליכט"],
+  ["Our Story", "אונזער געשיכטע"],
+  ["Why Ner Shava", "פארוואס נר שעוה"],
+  ["Wholesale Login", "האלסעיל לאגאין"],
+  ["Wholesale Inquiries", "האלסעיל אנפראגעס"],
+  ["Wholesale enquiries", "האלסעיל אנפראגעס"],
+  ["Wholesale login", "האלסעיל לאגאין"],
+  ["Wholesale", "האלסעיל"],
+  ["FAQ", "אפטע פראגעס"],
+  ["Contact", "קאנטאקט"],
+  ["Cart", "וואגן"],
+  ["Skip to content", "שפרינגט צום אינהאלט"],
+  ["Shop", "געשעפט"],
+  ["Company", "פירמע"],
+  ["All collections", "אלע קאלעקציעס"],
+  ["All rights reserved.", "אלע רעכטן רעזערווירט."],
+  ["Privacy", "פריוואטקייט"],
+  ["Terms", "באדינגונגען"],
+  ["Shipping &amp; Returns", "שיפינג און צוריקגאבע"],
+  ["Handmade candles of 100% pure beeswax.", "האנט געמאכטע ליכט פון 100% ריינעם בינען וואקס."],
+  ["Every step done by Shomrei Torah U'Mitzvos.", "יעדער טריט געטון דורך שומרי תורה ומצוות."],
+
+  ["The Shabbos table, the way it was meant to glow.", "דער שבת טיש, אזוי ווי ער דארף שיינען."],
+  ["Handmade from 100% pure beeswax — smokeless, dripless, and clean to the last hour.", "האנט געמאכט פון 100% ריינעם בינען וואקס — רויכערט נישט, טראפט נישט, און בלייבט ריין ביזן לעצטן שעה."],
+  ["Shop Shabbos candles", "קויפט שבת ליכט"],
+  ["100% Pure Beeswax", "100% ריינער בינען וואקס"],
+  ["Smokeless & Dripless", "רויכערט נישט און טראפט נישט"],
+  ["The braided flame that carries Shabbos out.", "די געפלאכטענע פלאם וואס באגלייט דעם שבת ארויס."],
+  ["Hand-braided pure beeswax with the wide flame the bracha calls for — no smoke, no drips.", "האנט געפלאכטן פון ריינעם בינען וואקס, מיט די ברייטע פלאם וואס די ברכה פארלאנגט — אן רויך, אן טראפן."],
+  ["Shop havdalah", "קויפט הבדלה ליכט"],
+  ["Hand-Braided", "האנט געפלאכטן"],
+  ["A light that burns steady and true.", "א ליכט וואס ברענט רואיג און זיכער."],
+  ["Twenty-six hours, forty-eight, seventy-two — or a full week. Lit once, trusted to the end.", "זעקס און צוואנציג שעה, אכט און פערציג, צוויי און זיבעציג — אדער א גאנצע וואך. איין מאל אנגעצונדן, פארלאזלעך ביזן סוף."],
+  ["Shop yahrtzeit", "קויפט יארצייט ליכט"],
+  ["26 hr – 7 day", "26 שעה – 7 טעג"],
+  ["Steady Glass Flame", "רואיגע פלאם אין גלאז"],
+
+  ["Pure Beeswax", "ריינער בינען וואקס"],
+  ["Handmade", "האנט געמאכט"],
+  ["Shomrei", "שומרי"],
+  ["Torah U'Mitzvos", "תורה ומצוות"],
+  ["Since", "זינט"],
+  ["Dor L'Dor", "דור לדור"],
+
+  ["The candle is the most beautiful thing on the Shabbos table.", "דאס ליכט איז די שענסטע זאך אויפן שבת טיש."],
+  ["For decades Ner Shava has been making candles the traditional way — pure beeswax, careful wicks, and a precise burn that keeps your leichter clean and your home peaceful.", "פאר צענדליגער יארן מאכט נר שעוה ליכט אויפן טראדיציאנעלן וועג — ריינער בינען וואקס, זארגפעלטיגע קנויטן, און א פונקטליכער ברען וואס האלט אייער לייכטער ריין און אייער שטוב רואיג."],
+  ["We are the only candle company in the world where every step, from the raw wax to the finished box, is done by Shomrei Torah U'Mitzvos.", "מיר זענען די איינציגסטע ליכט פירמע אין די וועלט וואו יעדער טריט, פונעם רויען וואקס ביז די פארטיגע שאכטל, ווערט געטון דורך שומרי תורה ומצוות."],
+  ["One who accustoms himself to light beautiful candles will merit beautiful, ehrliche children.", "דער וואס געוואוינט זיך צו צינדן שיינע ליכט וועט האבן שיינע ערליכע קינדער."],
+  ["Maseches Shabbos", "מסכת שבת"],
+  ["Read our story", "לייענט אונזער געשיכטע"],
+  ["Our Collections", "אונזערע קאלעקציעס"],
+  ["A complete range for every Yiddishe home.", "א פולער סארטימענט פאר יעדער אידישער שטוב."],
+  ["From the weekly Shabbos to Yom Tov, from Havdalah to the Yahrtzeit — every candle you need, made with the same care.", "פון די וועכנטליכע שבת ליכט ביז יום טוב, פון הבדלה ביזן יארצייט — יעדעס ליכט וואס איר דארפט, געמאכט מיט די זעלבע זארג."],
+  ["View collection →", "זעט די קאלעקציע ←"],
+  ["View All Collections", "זעט אלע קאלעקציעס"],
+  ["Most Asked For", "די מערסט געפרעגטע"],
+  ["The ones on the shelf every week.", "די וואס זענען אויפן פאליצע יעדע וואך."],
+  ["Browse all candles", "זעט אלע ליכט"],
+  ["Six reasons your Shabbos table deserves it.", "זעקס סיבות פארוואס אייער שבת טיש פארדינט עס."],
+  ["Stock the candles your customers ask for by name.", "האלט די ליכט וואס אייערע קונים פרעגן שוין ביים נאמען."],
+  ["Ner Shava is carried in groceries, Judaica stores, seforim stores, mikvahs and by shamashim throughout Williamsburg, Boro Park, Monsey and Kiryas Joel. We'd love to add your shelf to that list.", "נר שעוה געפינט זיך אין גראסעריס, יודאיקא געשעפטן, ספרים געשעפטן, מקוואות און ביי שמשים איבער וויליאמסבורג, בארא פארק, מאנסי און קרית יואל. מיר וואלטן זיך געפרייט צוצולייגן אויך אייער פאליצע צו די ליסטע."],
+  ["For Retailers", "פאר געשעפטן"],
+
+  ["Frum-Made, Start to Finish", "ערליך געמאכט, פון אנפאנג ביזן סוף"],
+  ["The only candle company in the world where every step is done by Shomrei Torah U'Mitzvos.", "די איינציגסטע ליכט פירמע אין די וועלט וואו יעדער טריט ווערט געטון דורך שומרי תורה ומצוות."],
+  ["Made from pure beeswax — the traditional standard for a beautiful, natural flame.", "געמאכט פון ריינעם בינען וואקס — דער טראדיציאנעלער סטאנדארט פאר א שיינער נאטירליכער פלאם."],
+  ["Clean-Burning Wicks", "קנויטן וואס ברענען ריין"],
+  ["Our wicks don't smoke and don't drip — even in a draft from a window or an A/C vent.", "אונזערע קנויטן רויכערן נישט און טראפן נישט — אפילו ביי א ווינט פון א פענצטער אדער אן עירקאנדישאן."],
+  ["Beautiful Every Time", "שיין יעדעס מאל"],
+  ["A natural elegance you can't fake. It burns even more beautifully than the picture.", "א נאטירליכע שיינקייט וואס מען קען נישט נאכמאכן. עס ברענט נאך שענער ווי אויפן בילד."],
+  ["Keeps Your Leichter Clean", "האלט אייער לייכטער ריין"],
+  ["No mess, no residue — your leichter stays as beautiful as the flame.", "קיין שמוץ, קיין רעשטלעך — אייער לייכטער בלייבט אזוי שיין ווי די פלאם."],
+  ["A Bracha from Chazal", "א ברכה פון חז״ל"],
+  ["“One who accustoms himself to light beautiful candles will merit beautiful, ehrliche children” (Shabbos).", "״דער וואס געוואוינט זיך צו צינדן שיינע ליכט וועט האבן שיינע ערליכע קינדער״ (שבת)."],
+
+  ["Beeswax Shabbos Candles", "וואקסענע שבת ליכט"],
+  ["Made from 100% pure beeswax — handmade for the beauty of Shabbos.", "געמאכט פון 100% ריינעם בינען וואקס — האנט געמאכט פאר די שיינקייט פון שבת."],
+  ["Paraffin Shabbos Candles", "פאראפין שבת ליכט"],
+  ["The Ner Yufa line — handmade paraffin Shabbos candles.", "די נר יפה ליניע — האנט געמאכטע פאראפין שבת ליכט."],
+  ["Beeswax Tea Lights", "וואקסענע טי לייטס"],
+  ["Pure beeswax tea lights — a small, steady flame.", "ריינע בינען וואקס טי לייטס — א קליינע רואיגע פלאם."],
+  ["Yahrtzeit Candles", "יארצייט ליכט"],
+  ["For the neshuma — a candle that burns steady and true.", "פאר די נשמה — א ליכט וואס ברענט רואיג און טריי."],
+  ["Havdalah & Chupah Candles", "הבדלה און חופה ליכט"],
+  ["The braided flame that carries Shabbos out — and the ones that begin a home.", "די געפלאכטענע פלאם וואס באגלייט דעם שבת ארויס — און די וואס הייבן אן א שטוב."],
+  ["Beeswax Lighters & Tzinders", "ליכט אנצינדערס און צינדערס"],
+  ["Refills, tzinders, and the small pieces that keep everything lit.", "ריפילס, צינדערס, און די קליינע זאכן וואס האלטן אלעס ברענענדיג."],
+  ["Chanukah Candles", "חנוכה ליכט"],
+  ["For eight nights of light — clean burning and beautifully made.", "פאר אכט נעכט ליכטיגקייט — ברענט ריין און שיין געמאכט."],
+  ["Pesach Candles", "פסח ליכט"],
+  ["Ma-Nishtanu — a candle for the Seder that lasts as long as the night.", "מה נשתנה — א ליכט פארן סדר וואס האלט אזוי לאנג ווי די נאכט."],
+  ["Yom Kippur Candles", "יום כיפור ליכט"],
+  ["A tall, steady flame for the holiest day of the year.", "א הויכע רואיגע פלאם פארן הייליגסטן טאג פון יאר."],
+  ["Glick's Wicks & Oil Wicks", "גליקס וויקס און אויל קנויטן"],
+  ["Precision wicks that burn clean, even in a draft.", "פונקטליכע קנויטן וואס ברענען ריין, אפילו אין א ווינט."],
+  ["Glick's Wicks", "גליקס וויקס"],
+  ["Paraffin Shabbos", "פאראפין שבת"],
+  ["Beeswax Shabbos", "וואקסענע שבת"],
+  ["Yahrtzeit", "יארצייט"],
+  ["Havdalah & Chupah", "הבדלה און חופה"],
+  ["Chanukah", "חנוכה"],
+
+  ["Ten collections, each made with the same care.", "צען קאלעקציעס, יעדע געמאכט מיט די זעלבע זארג."],
+  ["Every candle Ner Shava makes — organised so you can find what your table, your shul or your customers need.", "יעדעס ליכט וואס נר שעוה מאכט — סדר׳דיג צוגעשטעלט איר זאלט טרעפן וואס אייער טיש, אייער שול אדער אייערע קונים דארפן."],
+  ["products", "פראדוקטן"],
+  ["product", "פראדוקט"],
+  ["Add to cart", "לייגט אריין אין וואגן"],
+  ["Add", "לייגט אריין"],
+  ["Qty", "צאל"],
+  ["Item number", "ארטיקל נומער"],
+  ["Pack", "פעקל"],
+  ["Burn time", "ברען צייט"],
+  ["Material", "מאטעריאל"],
+  ["Case", "קעיס"],
+  ["100% pure beeswax", "100% ריינער בינען וואקס"],
+  ["Handmade paraffin", "האנט געמאכטער פאראפין"],
+  ["Beeswax-dipped wick", "קנויט געטונקען אין בינען וואקס"],
+  [" per case", " אין א קעיס"],
+  ["Buying for a store?", "קויפט איר פאר א געשעפט?"],
+  ["Case pricing is available to wholesale accounts.", "קעיס פרייזן זענען דא פאר האלסעיל קאנטעס."],
+  ["More from ", "נאך פון "],
+
+  ["Box of 20 candles", "שאכטל פון 20 ליכט"],
+  ["Box of 8 candles", "שאכטל פון 8 ליכט"],
+  ["Pack of 100", "פעקל פון 100"],
+  ["Pack of 16", "פעקל פון 16"],
+  ["Pack of 18", "פעקל פון 18"],
+  ["Pack of 50", "פעקל פון 50"],
+  ["Pack of 44", "פעקל פון 44"],
+  ["Pack of 24", "פעקל פון 24"],
+  ["Pack of 25", "פעקל פון 25"],
+  ["Tube of 25", "רערל פון 25"],
+  ["Pack of 10", "פעקל פון 10"],
+  ["Pack of 13", "פעקל פון 13"],
+  ["Pack of 2", "פעקל פון 2"],
+  ["Pack of 4", "פעקל פון 4"],
+  ["Pack of 5", "פעקל פון 5"],
+  ["Twin pack", "צווילינג פעקל"],
+  ["Single candle", "איין ליכט"],
+  ["26 hours", "26 שעה"],
+  ["48 hours", "48 שעה"],
+  ["72 hours", "72 שעה"],
+  ["7 days", "7 טעג"],
+  ["7 hours", "7 שעה"],
+  ["5 hours", "5 שעה"],
+  ["4 hours", "4 שעה"],
+  ["8–9 hours", "8–9 שעה"],
+  ["14–15 hours", "14–15 שעה"],
+
+  ["7 Hour Beeswax Shabbos Candles", "7 שעה וואקסענע שבת ליכט"],
+  ["5 Hour Beeswax Shabbos Candles", "5 שעה וואקסענע שבת ליכט"],
+  ["4 Hour Beeswax Shabbos Candles", "4 שעה וואקסענע שבת ליכט"],
+  ["7 Hour Paraffin Shabbos Candles", "7 שעה פאראפין שבת ליכט"],
+  ["5 Hour Paraffin Shabbos Candles", "5 שעה פאראפין שבת ליכט"],
+  ["4 Hour Paraffin Shabbos Candles", "4 שעה פאראפין שבת ליכט"],
+  ["Beeswax Tea Light Candles", "וואקסענע טי לייט ליכט"],
+  ["1 Day (26 Hr) Twin Pack Yahrtzeit Candle", "1 טאג (26 שעה) צווילינג פעקל יארצייט ליכט"],
+  ["1 Day (26 Hr) Yahrtzeit Candle", "1 טאג (26 שעה) יארצייט ליכט"],
+  ["2 Day (48 Hr) Yahrtzeit Candle", "2 טעג (48 שעה) יארצייט ליכט"],
+  ["3 Day (72 Hr) Yahrtzeit Candle", "3 טעג (72 שעה) יארצייט ליכט"],
+  ["7 Day Yahrtzeit Candle", "7 טעג יארצייט ליכט"],
+  ["Havdalah Candles", "הבדלה ליכט"],
+  ["2 Pack Round Havdalah Candles", "2 פעקל רונדע הבדלה ליכט"],
+  ["Big Havdalah Candle", "גרויסע הבדלה ליכט"],
+  ["Yaknehuz Candle 1-2-3", "יקנה״ז ליכט 1-2-3"],
+  ["2 White Chupah Havdalah Candles", "2 ווייסע חופה הבדלה ליכט"],
+  ["Beeswax Lighter Refills — Large", "ליכט אנצינדער ריפילס — גרויס"],
+  ["Beeswax Lighter Refills — Small", "ליכט אנצינדער ריפילס — קליין"],
+  ["Tzinders", "צינדערס"],
+  ["Chanukah Set", "חנוכה סעט"],
+  ["Chanukah Shamushim — Small", "חנוכה שמשים — קליין"],
+  ["Chanukah Shamushim — Medium", "חנוכה שמשים — מיטל"],
+  ["Chanukah Shamushim — Large", "חנוכה שמשים — גרויס"],
+  ["Kinder Chanukah Candles", "קינדער חנוכה ליכט"],
+  ["Large Ma-Nishtanu Candles (14–15 Hour)", "גרויסע מה נשתנה ליכט (14–15 שעה)"],
+  ["Ma-Nishtanu Candles (8–9 Hour)", "מה נשתנה ליכט (8–9 שעה)"],
+  ["Yom Kippur Candle — 15 Inch", "יום כיפור ליכט — 15 אינטש"],
+  ["Large Yom Kippur Candle — 28 Inch", "גרויסע יום כיפור ליכט — 28 אינטש"],
+  ["Ner Neshuma Oil Wicks — 11 Inch", "נר נשמה אויל קנויטן — 11 אינטש"],
+  ["11 Inch Oil Wicks Dipped in Beeswax", "11 אינטש אויל קנויטן געטונקען אין בינען וואקס"],
+
+  ["The candle came first. Then everything else.", "דאס ליכט איז געקומען צוערשט. דערנאך אלעס אנדערש."],
+  ["Ner Shava was built around a simple conviction: the candle is the most beautiful thing on the Shabbos table. When you light the ner Shabbos it brightens the whole room — and it brings an oneg to Shabbos and Yom Tov that nothing else can.", "נר שעוה איז געבויט געווארן ארום איין פשוטער איבערצייגונג: דאס ליכט איז די שענסטע זאך אויפן שבת טיש. ווען איר צינדט די שבת ליכט ווערט ליכטיג די גאנצע שטוב — און עס ברענגט אן עונג שבת ויום טוב וואס גארנישט אנדערש קען."],
+  ["So we set out to make a candle worthy of that moment. Pure beeswax, hand-poured. Wicks that burn steady and don't smoke or drip. A finish so clean your leichter stays beautiful, week after week.", "האבן מיר זיך גענומען מאכן א ליכט וואס איז ווערד דעם מאמענט. ריינער בינען וואקס, האנט געגאסן. קנויטן וואס ברענען רואיג און רויכערן נישט און טראפן נישט. אזוי ריין אז אייער לייכטער בלייבט שיין, וואך נאך וואך."],
+  ["From day one we made a decision that quietly shaped everything: every step of the work — from the raw wax to the finished box — is done by Shomrei Torah U'Mitzvos. We are, as far as we know, the only candle company in the world where this is true. It is why our candles are the ones you see on so many Shabbos tables in Williamsburg, Boro Park, Monsey and Kiryas Joel.", "פון ערשטן טאג האבן מיר געמאכט א באשלוס וואס האט שטיל געפורעמט אלעס: יעדער טריט פון די ארבעט — פונעם רויען וואקס ביז די פארטיגע שאכטל — ווערט געטון דורך שומרי תורה ומצוות. מיר זענען, וויפיל מיר ווייסן, די איינציגסטע ליכט פירמע אין די וועלט וואו דאס איז אמת. דאס איז פארוואס אונזערע ליכט זענען די וואס איר זעט אויף אזויפיל שבת טישן אין וויליאמסבורג, בארא פארק, מאנסי און קרית יואל."],
+  ["The Craft", "די מלאכה"],
+  ["Hand-poured. On purpose.", "האנט געגאסן. בכוונה."],
+  ["We could go faster. We choose not to. Every candle in our beeswax and paraffin Shabbos lines is handmade, so the finish, the wick placement and the burn quality are exactly what they should be.", "מיר וואלטן געקענט גיין שנעלער. מיר קלויבן אויס נישט. יעדעס ליכט אין אונזערע וואקס און פאראפין שבת ליניעס איז האנט געמאכט, אז די אויסארבעטונג, די פלאצירונג פונעם קנויט און די קוואליטעט פונעם ברען זאלן זיין פונקט ווי זיי דארפן זיין."],
+  ["It's a slower way to make a candle. It's the reason our customers keep coming back.", "עס איז א פאמעליכערער וועג צו מאכן א ליכט. עס איז די סיבה פארוואס אונזערע קונים קומען אלץ צוריק."],
+  ["The Promise", "די הבטחה"],
+  ["One brand, one promise.", "איין פירמע, איין הבטחה."],
+  ["When a Yiddishe mama or tatte walks into a store and sees the Ner Shava box on the shelf, we want one thought to come to mind: ", "ווען א אידישע מאמע אדער טאטע גייט אריין אין געשעפט און זעט די נר שעוה שאכטל אויפן פאליצע, ווילן מיר אז איין געדאנק זאל קומען אין זינען: "],
+  ["That's what we've quietly built, candle by candle, Shabbos by Shabbos, for years.", "דאס איז וואס מיר האבן שטיל געבויט, ליכט נאך ליכט, שבת נאך שבת, פאר יארן."],
+  ["Browse our candles", "זעט אונזערע ליכט"],
+  ["Get in touch", "פארבינדט אייך מיט אונז"],
+
+  ["Every one of these is the reason a family switches to Ner Shava — and the reason they don't switch back.", "יעדע איינע פון די איז די סיבה פארוואס א משפחה בייט זיך איבער צו נר שעוה — און די סיבה פארוואס זיי בייטן זיך נישט צוריק."],
+  ["Ahh… it is Shabbos in the world… lit up with Ner Shava.", "אַהה… עס איז שבת אין די וועלט… באלויכטן מיט נר שעוה."],
+  ["Shop the candles", "קויפט די ליכט"],
+
+  ["Frequently Asked", "אפטע פראגעס"],
+  ["Everything you might want to know.", "אלעס וואס איר קענט ווילן וויסן."],
+  ["What is Ner Shava made from?", "פון וואס איז נר שעוה געמאכט?"],
+  ["Our signature Shabbos line, tea lights, Yahrtzeit, Havdalah, Chanukah, Pesach and Yom Kippur candles are made from 100% pure beeswax. We also make a handmade paraffin Shabbos line — Ner Yufa — as an everyday option.", "אונזערע שבת ליכט, טי לייטס, יארצייט, הבדלה, חנוכה, פסח און יום כיפור ליכט זענען געמאכט פון 100% ריינעם בינען וואקס. מיר מאכן אויך א האנט געמאכטע פאראפין שבת ליניע — נר יפה — אלס א וואכנדיגע אפציע."],
+  ["Why beeswax instead of paraffin?", "פארוואס בינען וואקס און נישט פאראפין?"],
+  ["Beeswax burns with a warmer, more natural light, it holds its shape, and it leaves your leichter clean. It is also the traditional choice — a ner shel shaava is what the name Ner Shava means.", "בינען וואקס ברענט מיט א ווארעמערער, נאטירליכערער ליכט, עס האלט זיין פארעם, און עס לאזט אייער לייכטער ריין. עס איז אויך די טראדיציאנעלע ברירה — א נר של שעוה איז דאך וואס דער נאמען נר שעוה מיינט."],
+  ["How long do the candles burn?", "וויפיל שעה ברענען די ליכט?"],
+  ["Our Shabbos candles come in four, five and seven hour burns. Yahrtzeit candles run 26 hours, 48 hours, 72 hours or a full seven days. Ma-Nishtanu Seder candles burn 8–9 hours, or 14–15 hours in the large size.", "אונזערע שבת ליכט קומען אין פיר, פינף און זיבן שעה. יארצייט ליכט ברענען 26 שעה, 48 שעה, 72 שעה אדער פולע זיבן טעג. מה נשתנה סדר ליכט ברענען 8–9 שעה, אדער 14–15 שעה אין די גרויסע גרייס."],
+  ["Do the candles drip or smoke?", "טראפן אדער רויכערן די ליכט?"],
+  ["No. Our wicks are chosen and placed so the candle burns clean and stays put — even in a draft from an open window or an air-conditioning vent.", "ניין. אונזערע קנויטן זענען אויסגעקליבן און אריינגעשטעלט אז דאס ליכט זאל ברענען ריין און בלייבן שטיין — אפילו ביי א ווינט פון אן אפענעם פענצטער אדער אן עירקאנדישאן."],
+  ["Where are Ner Shava candles made?", "וואו ווערן נר שעוה ליכט געמאכט?"],
+  ["In Mountainville, New York. Every step of production, from raw wax to finished box, is done here by Shomrei Torah U'Mitzvos.", "אין מאונטענוויל, ניו יארק. יעדער טריט פון די פראדוקציע, פון רויען וואקס ביז פארטיגע שאכטל, ווערט דא געטון דורך שומרי תורה ומצוות."],
+  ["Where can I buy Ner Shava candles?", "וואו קען איך קויפן נר שעוה ליכט?"],
+  ["In groceries, Judaica stores, seforim stores and mikvahs throughout Williamsburg, Boro Park, Monsey and Kiryas Joel — and now directly from us on this site.", "אין גראסעריס, יודאיקא געשעפטן, ספרים געשעפטן און מקוואות איבער וויליאמסבורג, בארא פארק, מאנסי און קרית יואל — און יעצט אויך דירעקט פון אונז דא אויפן וועבזייטל."],
+  ["Do you sell direct to consumers online?", "פארקויפט איר דירעקט צו קונים אנליין?"],
+  ["Yes. Everything in our catalog can be ordered here and shipped to your door. Orders are packed and dispatched from Mountainville.", "יא. אלעס אין אונזער קאטאלאג קען מען דא באשטעלן און עס ווערט געשיקט צו אייער טיר. באשטעלונגען ווערן געפאקט און געשיקט פון מאונטענוויל."],
+  ["Do you offer wholesale?", "האט איר האלסעיל?"],
+  ["Yes. If you run a store we'd love to hear from you. Send a wholesale enquiry and we'll set up an account with case pricing and terms.", "יא. אויב איר פירט א געשעפט וואלטן מיר זיך געפרייט צו הערן פון אייך. שיקט אריין א האלסעיל אנפראגע און מיר וועלן אויפשטעלן א קאנטע מיט קעיס פרייזן און באדינגונגען."],
+  ["Are your candles under hashgacha?", "זענען אייערע ליכט אונטער השגחה?"],
+  ["Every step of production is done by Shomrei Torah U'Mitzvos. For any specific hashgacha question please call the office at 845-534-2821.", "יעדער טריט פון די פראדוקציע ווערט געטון דורך שומרי תורה ומצוות. פאר סיי וועלכע ספעציפישע השגחה פראגע רופט ביטע דעם אפיס אויף 845-534-2821."],
+  ["Still have a question? Call ", "האט איר נאך א פראגע? רופט "],
+  [" or email ", " אדער שרייבט צו "],
+
+  ["Carry the candles your customers already trust.", "פארקויפט די ליכט וואס אייערע קונים געטרויען שוין."],
+  ["Ner Shava is carried in groceries, Judaica stores, seforim stores, mikvahs and by shamashim in Williamsburg, Boro Park, Monsey and Kiryas Joel. If you'd like to stock our full line, we'd love to hear from you.", "נר שעוה געפינט זיך אין גראסעריס, יודאיקא געשעפטן, ספרים געשעפטן, מקוואות און ביי שמשים אין וויליאמסבורג, בארא פארק, מאנסי און קרית יואל. אויב איר ווילט האלטן אונזער פולע ליניע, וואלטן מיר זיך געפרייט צו הערן פון אייך."],
+  ["Why partner with us", "פארוואס מיט אונז"],
+  ["A shelf presence you don't have to sell.", "א פאליצע וואס פארקויפט זיך אליין."],
+  ["Recognised name", "אן אנערקענטער נאמען"],
+  ["Yiddishe families recognise the Ner Shava box on sight — the brand does the selling for you.", "אידישע משפחות דערקענען די נר שעוה שאכטל פון ווייטן — דער נאמען פארקויפט פאר אייך."],
+  ["Full-year line", "א פולע יאר ליניע"],
+  ["Weekly Shabbos, Yahrtzeit, Havdalah, Chanukah, Pesach, Yom Kippur — one supplier, ten collections.", "וועכנטליכע שבת, יארצייט, הבדלה, חנוכה, פסח, יום כיפור — איין צושטעלער, צען קאלעקציעס."],
+  ["Consistent quality", "שטענדיגע קוואליטעט"],
+  ["Handmade and hand-checked. Fewer complaints, fewer returns.", "האנט געמאכט און האנט איבערגעקוקט. ווייניגער קלאגעס, ווייניגער צוריקגאבעס."],
+  ["Frum-owned & produced", "ערליך פארמאגט און פראדוצירט"],
+  ["The only candle company where every step of production is done by Shomrei Torah U'Mitzvos.", "די איינציגסטע ליכט פירמע וואו יעדער טריט פון די פראדוקציע ווערט געטון דורך שומרי תורה ומצוות."],
+  ["How an account works", "ווי אזוי א קאנטע ארבעט"],
+  ["Send the enquiry.", "שיקט אריין די אנפראגע."],
+  ["Tell us about your store and what you'd like to carry.", "דערציילט אונז וועגן אייער געשעפט און וואס איר ווילט האלטן."],
+  ["We set up your account.", "מיר שטעלן אויף אייער קאנטע."],
+  ["The office confirms case pricing and terms with you directly.", "דער אפיס באשטעטיגט קעיס פרייזן און באדינגונגען מיט אייך דירעקט."],
+  ["Order online, any time.", "באשטעלט אנליין, ווען איר ווילט."],
+  ["You get a login here with your case prices, your order history and re-ordering in a few clicks.", "איר באקומט דא א לאגאין מיט אייערע קעיס פרייזן, אייער באשטעלונג היסטאריע און איבער־באשטעלן אין עטליכע קליקס."],
+  ["Already have an account?", "האט איר שוין א קאנטע?"],
+  ["Log in to order", "לאגט אריין צו באשטעלן"],
+  ["Prefer to call?", "בעסער צו רופן?"],
+  ["or email", "אדער שרייבט צו"],
+  ["Wholesale enquiry", "האלסעיל אנפראגע"],
+  ["Tell us about your store and we'll be in touch.", "דערציילט אונז וועגן אייער געשעפט און מיר וועלן זיך פארבינדן."],
+  ["Business name", "ביזנעס נאמען"],
+  ["Your name", "אייער נאמען"],
+  ["Phone", "טעלעפאן"],
+  ["Email", "אימעיל"],
+  ["City / area", "שטאט / געגנט"],
+  ["Type of store", "סארט געשעפט"],
+  ["Choose…", "קלויבט אויס…"],
+  ["Grocery", "גראסערי"],
+  ["Judaica store", "יודאיקא געשעפט"],
+  ["Seforim store", "ספרים געשעפט"],
+  ["Mikvah", "מקוה"],
+  ["Shul / shamash", "שול / שמש"],
+  ["Distributor", "פארשפרייטער"],
+  ["Other", "אנדערש"],
+  ["What would you like to carry?", "וואס ווילט איר האלטן?"],
+  ["Send enquiry", "שיקט די אנפראגע"],
+  ["By submitting, you agree we may contact you regarding your wholesale enquiry.", "מיטן אריינשיקן זענט איר מסכים אז מיר מעגן זיך פארבינדן מיט אייך וועגן אייער האלסעיל אנפראגע."],
+  ["Thank you.", "א דאנק."],
+  ["Your enquiry is with the office — we'll be in touch to set up your account.", "אייער אנפראגע איז ביים אפיס — מיר וועלן זיך פארבינדן אויפצושטעלן אייער קאנטע."],
+
+  ["We'd be glad to hear from you.", "מיר וועלן זיך פרייען צו הערן פון אייך."],
+  ["The office", "דער אפיס"],
+  ["Telephone", "טעלעפאן"],
+  ["Cell", "סעל"],
+  ["Fax", "פאקס"],
+  ["Address", "אדרעס"],
+  ["For wholesale and store accounts, please use the", "פאר האלסעיל און געשעפט קאנטעס, ניצט ביטע די"],
+  ["wholesale enquiry form", "האלסעיל אנפראגע פארעם"],
+  ["— it reaches the right desk faster.", "— עס קומט אן שנעלער צום ריכטיגן טיש."],
+  ["Send a message", "שיקט א מעסעדזש"],
+  ["Message", "מעסעדזש"],
+  ["Send message", "שיקט די מעסעדזש"],
+  ["Your message has reached the office — we'll be in touch shortly.", "אייער מעסעדזש איז אנגעקומען אין אפיס — מיר וועלן זיך באלד פארבינדן."],
+
+  ["Your cart", "אייער וואגן"],
+  ["Loading your cart…", "מיר לאדן אייער וואגן…"],
+];
+
+// longest-first so contained phrases don't clobber their containers
+const YI_SORTED = [...YI].sort((a, b) => b[0].length - a[0].length);
+
+const YI_CART = {
+  empty: "אייער וואגן איז ליידיג.", browse: "זעט די ליכט",
+  working: "מיר רעכענען אויס אייער סך הכל…",
+  each: "יעדע", remove: "אראפנעמען",
+  summary: "באשטעלונג איבערבליק",
+  subtotal: "סך הכל", shipping: "שיפינג", freeShip: "אומזיסט", total: "צוזאמען",
+  checkout: "זיכערער טשעק־אוט",
+  note: "קארטל צאלונג גייט דורך Stripe. איר וועט אריינלייגן אייער שיקן־אדרעס אויפן קומענדיגן טריט.",
+  spend: "קויפט נאך {amt} פאר אומזיסטע שיפינג.", shipFree: "שיפינג איז אויף אונז.",
+  added: "אריינגעלייגט אין אייער וואגן.", addedN: "{n} אריינגעלייגט אין אייער וואגן.",
+  cartFail: "מיר האבן נישט געקענט לאדן אייער וואגן. ביטע פרישט אויף די זייט.",
+  coFail: "מיר האבן נישט געקענט אנהייבן דעם טשעק־אוט. ביטע פרובירט נאכאמאל.",
+  network: "נעץ פראבלעם — ביטע פרובירט נאכאמאל.",
+  toCheckout: "מיר פירן אייך צום טשעק־אוט…",
+};
+
+function translateYi(markup) {
+  let out = markup
+    .replace('<html lang="en">', '<html lang="yi" dir="rtl">')
+    .replace(/<body class="/, '<body class="yi ');
+  for (const [en, yi] of YI_SORTED) {
+    if (out.includes(en)) out = out.split(en).join(yi);
+    const escaped = esc(en);
+    if (escaped !== en && out.includes(escaped)) out = out.split(escaped).join(yi);
+  }
+  out = out.replace('<script src="/assets/site.js',
+    `<script>window.NS_STR=${JSON.stringify(YI_CART)}</script><script src="/assets/site.js`);
+  // the toggle itself swaps direction
+  out = out.replace('href="?lang=yi" class="lang-toggle">אידיש', 'href="?lang=en" class="lang-toggle">English');
+  return out;
+}
 
 const ORDER_STATUSES = ["pending", "paid", "processing", "shipped", "cancelled"];
 const INQ_STATUSES = ["New", "Replied", "Closed"];
@@ -190,7 +521,7 @@ function layout({ title, description, body, path = "/", bodyClass = "", head = "
 <meta property="og:title" content="${esc(pageTitle)}">
 <meta property="og:description" content="${esc(desc)}">
 <meta property="og:type" content="website">
-<meta property="og:image" content="/assets/img/hero-collection.jpg">
+<meta property="og:image" content="/assets/img/hero-scene-shabbos.jpg">
 <link rel="icon" href="/assets/img/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -207,6 +538,7 @@ ${head}
       <span class="head-bar-contact">
         <a href="tel:${PHONE.replace(/-/g, "")}">${PHONE}</a>
         <a href="mailto:${EMAIL}">${EMAIL}</a>
+        <a href="?lang=yi" class="lang-toggle">אידיש</a>
       </span>
     </div>
   </div>
@@ -417,7 +749,7 @@ ${trustStrip()}
 
 <section class="wrap section split">
   <div class="split-media">
-    <img src="/assets/img/hero-pesach.jpg" alt="A pair of Ner Shava beeswax candles burning" width="246" height="900">
+    <img src="/assets/img/story-leichter.jpg" alt="A twelve-branch silver leichter with Ner Shava beeswax candles burning" width="853" height="1280">
   </div>
   <div class="split-body">
     <p class="eyebrow">Our Story</p>
@@ -607,7 +939,7 @@ function pageAbout() {
     <p>So we set out to make a candle worthy of that moment. Pure beeswax, hand-poured. Wicks that burn steady and don't smoke or drip. A finish so clean your leichter stays beautiful, week after week.</p>
     <p>From day one we made a decision that quietly shaped everything: every step of the work — from the raw wax to the finished box — is done by Shomrei Torah U'Mitzvos. We are, as far as we know, the only candle company in the world where this is true. It is why our candles are the ones you see on so many Shabbos tables in Williamsburg, Boro Park, Monsey and Kiryas Joel.</p>
   </div>
-  <div class="split-media"><img src="/assets/img/hero-havdalah.jpg" alt="A braided Ner Shava havdalah candle burning" width="169" height="900"></div>
+  <div class="split-media"><img src="/assets/img/story-leichter.jpg" alt="A twelve-branch silver leichter with Ner Shava beeswax candles burning" width="853" height="1280"></div>
 </section>
 <section class="section band-cream">
   <div class="wrap two-col">
@@ -1689,6 +2021,18 @@ export default {
     const method = req.method;
     const secureCookie = url.protocol === "https:";
 
+    // Language: ?lang=yi|en wins and is remembered in a cookie; default en.
+    const langParam = url.searchParams.get("lang");
+    const lang = langParam === "yi" || langParam === "en"
+      ? langParam
+      : ((req.headers.get("Cookie") || "").match(/ns_lang=(yi|en)/) || [])[1] || "en";
+    const langSet = langParam
+      ? { "Set-Cookie": cookie("ns_lang", lang, 60 * 60 * 24 * 365, secureCookie) }
+      : undefined;
+    // Storefront renderer: applies the Yiddish pass and the lang cookie.
+    const R = (markup, status) =>
+      html(lang === "yi" ? translateYi(markup) : markup, status || 200, langSet);
+
     try {
       /* ---- API ---- */
       if (path === "/api/cart/quote" && method === "POST") {
@@ -1922,30 +2266,30 @@ export default {
       }
 
       /* ---- storefront ---- */
-      if (path === "/") return html(await pageHome(env));
-      if (path === "/candles") return html(await pageCollections(env));
+      if (path === "/") return R(await pageHome(env));
+      if (path === "/candles") return R(await pageCollections(env));
       const collMatch = path.match(/^\/candles\/([a-z0-9-]+)$/);
       if (collMatch) {
         const page = await pageCollection(env, collMatch[1]);
-        return page ? html(page) : notFound();
+        return page ? R(page) : notFound();
       }
       const prodPage = path.match(/^\/product\/([a-z0-9-]+)$/);
       if (prodPage) {
         const page = await pageProduct(env, prodPage[1]);
-        return page ? html(page) : notFound();
+        return page ? R(page) : notFound();
       }
-      if (path === "/cart") return html(pageCart());
-      if (path === "/order/success") return html(await pageOrderSuccess(env, url, ctx));
-      if (path === "/about") return html(pageAbout());
-      if (path === "/why-ner-shava") return html(pageWhy());
-      if (path === "/faq") return html(pageFaq());
+      if (path === "/cart") return R(pageCart());
+      if (path === "/order/success") return R(await pageOrderSuccess(env, url, ctx));
+      if (path === "/about") return R(pageAbout());
+      if (path === "/why-ner-shava") return R(pageWhy());
+      if (path === "/faq") return R(pageFaq());
 
       if (path === "/contact") {
         if (method === "POST") {
           await handleInquiry(req, env, "contact");
-          return html(pageContact(true));
+          return R(pageContact(true));
         }
-        return html(pageContact(false));
+        return R(pageContact(false));
       }
       if (path === "/wholesale") {
         if (method === "POST") {
@@ -1959,9 +2303,9 @@ export default {
               .bind(f.business, f.name || null, f.email.toLowerCase(), f.phone || null,
                 f.city || null, f.store_type || null, f.message || null).run();
           }
-          return html(pageWholesale(true));
+          return R(pageWholesale(true));
         }
-        return html(pageWholesale(false));
+        return R(pageWholesale(false));
       }
 
       if (path === "/privacy") return html(policyPage("Privacy Policy", [

@@ -6,6 +6,9 @@
   "use strict";
 
   var KEY = "ns_cart";
+  // Yiddish strings injected by the worker when lang=yi; English otherwise.
+  var STR = window.NS_STR || {};
+  function T(key, fallback) { return STR[key] || fallback; }
   var money = function (c) {
     return "$" + (Math.round(c || 0) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
@@ -76,7 +79,7 @@
     if (!btn) return;
     e.preventDefault();
     addToCart(btn.getAttribute("data-add"), 1);
-    toast("Added to your cart.");
+    toast(T("added", "Added to your cart."));
   });
 
   document.addEventListener("submit", function (e) {
@@ -85,7 +88,7 @@
     e.preventDefault();
     var qty = Math.max(1, Math.min(99, parseInt(form.querySelector('[name="qty"]').value, 10) || 1));
     addToCart(form.getAttribute("data-add-form"), qty);
-    toast(qty === 1 ? "Added to your cart." : qty + " added to your cart.");
+    toast(qty === 1 ? T("added", "Added to your cart.") : T("addedN", "{n} added to your cart.").replace("{n}", qty));
   });
 
   /* ── mobile nav ───────────────────────────────────────────────────── */
@@ -160,12 +163,12 @@
     if (!items.length) {
       root.className = "cart-root empty";
       root.innerHTML =
-        '<p class="lede">Your cart is empty.</p>' +
-        '<p class="mt"><a class="btn btn-gold" href="/candles">Browse the candles</a></p>';
+        '<p class="lede">' + T("empty", "Your cart is empty.") + '</p>' +
+        '<p class="mt"><a class="btn btn-gold" href="/candles">' + T("browse", "Browse the candles") + '</a></p>';
       return;
     }
     root.className = "cart-root";
-    root.innerHTML = '<p class="quiet">Working out your total…</p>';
+    root.innerHTML = '<p class="quiet">' + T("working", "Working out your total…") + '</p>';
 
     fetch("/api/cart/quote", {
       method: "POST",
@@ -189,11 +192,11 @@
             '<div>' +
               '<h3><a href="/product/' + l.slug + '">' + l.name + "</a></h3>" +
               (l.unit_label ? '<div class="unit">' + l.unit_label + "</div>" : "") +
-              '<div class="unit">' + money(l.unit_price_cents) + " each</div>" +
+              '<div class="unit">' + money(l.unit_price_cents) + " " + T("each", "each") + "</div>" +
               '<div class="cart-controls">' +
                 '<input type="number" min="1" max="99" value="' + l.qty +
                   '" data-qty="' + l.slug + '" inputmode="numeric" aria-label="Quantity">' +
-                '<button class="cart-remove" type="button" data-remove="' + l.slug + '">Remove</button>' +
+                '<button class="cart-remove" type="button" data-remove="' + l.slug + '">' + T("remove", "Remove") + "</button>" +
               "</div>" +
             "</div>" +
             '<div class="cart-line-total">' + money(l.line_total_cents) + "</div>" +
@@ -202,27 +205,27 @@
 
         var away = q.freeShipOver - q.subtotal;
         var shipNote = q.shipping === 0
-          ? '<p class="ship-note">Shipping is on us.</p>'
+          ? '<p class="ship-note">' + T("shipFree", "Shipping is on us.") + '</p>'
           : (away > 0
-            ? '<p class="ship-note">Spend ' + money(away) + " more for free shipping.</p>"
+            ? '<p class="ship-note">' + T("spend", "Spend {amt} more for free shipping.").replace("{amt}", money(away)) + "</p>"
             : "");
 
         root.innerHTML =
           "<div>" + lines + "</div>" +
           '<aside class="cart-summary">' +
-            "<h3>Order summary</h3>" +
-            '<div class="order-line"><span>Subtotal</span><span>' + money(q.subtotal) + "</span></div>" +
-            '<div class="order-line"><span>Shipping</span><span>' +
-              (q.shipping ? money(q.shipping) : "Free") + "</span></div>" +
-            '<div class="order-line total"><span>Total</span><span>' + money(q.total) + "</span></div>" +
+            "<h3>" + T("summary", "Order summary") + "</h3>" +
+            '<div class="order-line"><span>' + T("subtotal", "Subtotal") + '</span><span>' + money(q.subtotal) + "</span></div>" +
+            '<div class="order-line"><span>' + T("shipping", "Shipping") + '</span><span>' +
+              (q.shipping ? money(q.shipping) : T("freeShip", "Free")) + "</span></div>" +
+            '<div class="order-line total"><span>' + T("total", "Total") + '</span><span>' + money(q.total) + "</span></div>" +
             shipNote +
-            '<button class="btn btn-gold" type="button" id="checkout">Secure checkout</button>' +
-            '<p class="fineprint quiet" style="margin-top:.8rem">Card payment is handled by Stripe. ' +
-              "You'll enter your shipping address on the next step.</p>" +
+            '<button class="btn btn-gold" type="button" id="checkout">' + T("checkout", "Secure checkout") + '</button>' +
+            '<p class="fineprint quiet" style="margin-top:.8rem">' +
+              T("note", "Card payment is handled by Stripe. You'll enter your shipping address on the next step.") + "</p>" +
           "</aside>";
       })
       .catch(function () {
-        root.innerHTML = '<div class="notice bad">We couldn\'t load your cart. Please refresh the page.</div>';
+        root.innerHTML = '<div class="notice bad">' + T("cartFail", "We couldn't load your cart. Please refresh the page.") + '</div>';
       });
   }
 
@@ -257,7 +260,7 @@
   function checkout(btn, payload) {
     var original = btn.textContent;
     btn.disabled = true;
-    btn.textContent = "Taking you to checkout…";
+    btn.textContent = T("toCheckout", "Taking you to checkout…");
     fetch("/api/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -266,12 +269,12 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.url) { window.location.href = data.url; return; }
-        toast(data.error || "We couldn't start the checkout. Please try again.");
+        toast(data.error || T("coFail", "We couldn't start the checkout. Please try again."));
         btn.disabled = false;
         btn.textContent = original;
       })
       .catch(function () {
-        toast("Network problem — please try again.");
+        toast(T("network", "Network problem — please try again."));
         btn.disabled = false;
         btn.textContent = original;
       });
@@ -346,7 +349,7 @@
           termsBtn.textContent = original;
         })
         .catch(function () {
-          toast("Network problem — please try again.");
+          toast(T("network", "Network problem — please try again."));
           termsBtn.disabled = false;
           termsBtn.textContent = original;
         });

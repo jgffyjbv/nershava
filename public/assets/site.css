@@ -614,6 +614,36 @@ body.admin .table th, body.admin .table td { padding-left: .8rem; }
   .rowform .form { min-width: 0; }
 }
 
+/* ── Yiddish / RTL ─────────────────────────────────────────────────────── */
+
+.lang-toggle {
+  border: 1px solid rgba(246, 236, 210, .5); border-radius: 999px;
+  padding: .12rem .7rem; font-weight: 700;
+}
+
+/* Hebrew-script headlines: Manrope has no Hebrew glyphs, so give Yiddish
+   pages the Frank Ruhl display face instead of a system fallback. */
+body.yi h1, body.yi h2, body.yi h3,
+body.yi .hslide-en, body.yi .brand-name, body.yi .coll-name, body.yi .card-title,
+body.yi .callout-big, body.yi .pull, body.yi .faq summary {
+  font-family: var(--hebrew); letter-spacing: 0; font-weight: 900;
+}
+body.yi { line-height: 1.75; }
+body.yi .hslide-heb { font-size: clamp(1.35rem, 2.2vw, 1.8rem); }
+
+[dir="rtl"] .hslide-heb { text-align: right; }
+[dir="rtl"] .split-body blockquote {
+  border-left: 0; border-right: 3px solid var(--gold);
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+[dir="rtl"] .faq summary { padding: 1.15rem 0 1.15rem 2.5rem; }
+[dir="rtl"] .faq summary::after { right: auto; left: .4rem; }
+[dir="rtl"] .contact-list strong { text-align: right; }
+[dir="rtl"] .specs dt { text-align: right; }
+[dir="rtl"] .hero-dots { left: auto; right: 0; }
+[dir="rtl"] .push-right { margin-left: 0; margin-right: auto; }
+[dir="rtl"] .brand { margin-right: 0; margin-left: auto; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
