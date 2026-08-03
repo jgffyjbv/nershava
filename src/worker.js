@@ -1329,8 +1329,161 @@ function orderEmailHtml(order) {
 </div>`;
 }
 
+/* ── fulfilment ────────────────────────────────────────────────────────
+   Paid orders are pushed to ShipStation, which is what actually talks to
+   the carriers and warehouses. Silently skipped until the keys are set, so
+   the shop works fine without it. Failures are logged and mailed to the
+   office rather than thrown — a fulfilment outage must never lose an order
+   that the customer has already paid for.
+
+   ShipStation can also *pull*: it polls /api/fulfilment/orders (Basic auth,
+   FULFILMENT_USER/FULFILMENT_PASS) and posts shipments back to
+   /api/fulfilment/shipped, which marks the order shipped and emails the
+   customer their tracking number. Push, pull or both — a 3PL that speaks
+   neither can be handed the same JSON feed. */
+
+async function pushToShipStation(env, order) {
+  if (!env.SHIPSTATION_KEY || !env.SHIPSTATION_SECRET) return { skipped: true };
+  const auth = btoa(`${env.SHIPSTATION_KEY}:${env.SHIPSTATION_SECRET}`);
+  const name = order.name || order.business || "Customer";
+  const payload = {
+    orderNumber: order.code,
+    orderKey: order.code,
+    orderDate: (order.created_at || "").replace(" ", "T") || undefined,
+    orderStatus: "awaiting_shipment",
+    customerEmail: order.email || undefined,
+    amountPaid: order.total_cents / 100,
+    shippingAmount: order.shipping_cents / 100,
+    billTo: { name },
+    shipTo: {
+      name,
+      company: order.business || undefined,
+      street1: order.ship_line1 || "",
+      street2: order.ship_line2 || undefined,
+      city: order.ship_city || "",
+      state: order.ship_state || "",
+      postalCode: order.ship_zip || "",
+      country: order.ship_country || "US",
+      phone: order.phone || undefined,
+    },
+    items: (order.items || []).map((i) => ({
+      sku: i.sku || undefined,
+      name: i.name,
+      quantity: i.qty,
+      unitPrice: i.unit_price_cents / 100,
+    })),
+    customerNotes: order.kind === "wholesale"
+      ? `Wholesale order${order.business ? ` — ${order.business}` : ""}. Quantities are CASES.`
+      : undefined,
+  };
+  try {
+    const res = await fetch("https://ssapi.shipstation.com/orders/createorder", {
+      method: "POST",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`ShipStation ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    return { ok: true };
+  } catch (err) {
+    console.error("shipstation push failed", order.code, err);
+    await sendMail(env, {
+      to: notifyAddress(env),
+      subject: `Order ${order.code} did NOT reach ShipStation — ship it manually`,
+      html: `<p>Order <strong>${esc(order.code)}</strong> was paid but could not be sent to
+        ShipStation, so it will not appear there. Please enter it by hand.</p>
+        <p style="color:#777">${esc(String(err.message || err))}</p>`,
+    }).catch(() => {});
+    return { error: String(err) };
+  }
+}
+
+// Pull side: a fulfilment partner polls for orders and posts shipments back.
+async function fulfilmentApi(req, env, url, path, method) {
+  const user = env.FULFILMENT_USER, pass = env.FULFILMENT_PASS;
+  if (!user || !pass) return json({ error: "Fulfilment API is not enabled." }, 503);
+  const header = req.headers.get("Authorization") || "";
+  const expected = "Basic " + btoa(`${user}:${pass}`);
+  if (header.length !== expected.length || !timingSafeEqual(header, expected))
+    return json({ error: "Unauthorised." }, 401, { "WWW-Authenticate": 'Basic realm="fulfilment"' });
+
+  if (path === "/api/fulfilment/orders" && method === "GET") {
+    const since = url.searchParams.get("since");
+    const { results } = await env.DB.prepare(`
+      SELECT * FROM orders
+      WHERE payment_status IN ('paid','terms') AND status NOT IN ('shipped','cancelled')
+        ${since ? "AND created_at >= ?" : ""}
+      ORDER BY created_at LIMIT 200`).bind(...(since ? [since] : [])).all();
+    const orders = [];
+    for (const o of results || []) {
+      const full = await orderWithItems(env, o);
+      orders.push({
+        order_number: full.code,
+        order_date: full.created_at,
+        kind: full.kind,
+        status: full.status,
+        email: full.email,
+        phone: full.phone,
+        ship_to: {
+          name: full.name, company: full.business,
+          line1: full.ship_line1, line2: full.ship_line2,
+          city: full.ship_city, state: full.ship_state,
+          postal_code: full.ship_zip, country: full.ship_country || "US",
+        },
+        // wholesale quantities are CASES, not individual units
+        unit_of_measure: full.kind === "wholesale" ? "case" : "each",
+        items: full.items.map((i) => ({
+          sku: i.sku, name: i.name, unit_label: i.unit_label,
+          quantity: i.qty, unit_price: i.unit_price_cents / 100,
+        })),
+        totals: {
+          subtotal: full.subtotal_cents / 100,
+          shipping: full.shipping_cents / 100,
+          total: full.total_cents / 100,
+        },
+      });
+    }
+    return json({ count: orders.length, orders });
+  }
+
+  if (path === "/api/fulfilment/shipped" && method === "POST") {
+    const body = await req.json().catch(() => ({}));
+    const code = String(body.order_number || "").trim();
+    if (!code) return json({ error: "order_number is required." }, 400);
+    const order = await env.DB.prepare("SELECT * FROM orders WHERE code = ?").bind(code).first();
+    if (!order) return json({ error: "Unknown order." }, 404);
+    if (order.status === "shipped") return json({ ok: true, already: true });
+
+    const carrier = String(body.carrier || "").slice(0, 60);
+    const tracking = String(body.tracking_number || "").slice(0, 120);
+    const note = [order.notes, `Shipped ${carrier} ${tracking}`.trim()].filter(Boolean).join("\n");
+    await env.DB.prepare("UPDATE orders SET status = 'shipped', notes = ? WHERE id = ?")
+      .bind(note, order.id).run();
+
+    if (order.email) {
+      const track = tracking
+        ? `<p style="font-family:Helvetica,Arial,sans-serif">Carrier: <strong>${esc(carrier || "—")}</strong><br>
+             Tracking: <strong>${esc(tracking)}</strong></p>`
+        : "";
+      await sendMail(env, {
+        to: order.email,
+        subject: `Your Ner Shava order ${order.code} is on its way`,
+        html: `<div style="font-family:Georgia,serif;max-width:560px;color:#241a17">
+          <h2 style="color:#5C1A22;margin:0 0 4px">Ner Shava Candles</h2>
+          <p style="font-family:Helvetica,Arial,sans-serif">Your order <strong>${esc(order.code)}</strong> has shipped.</p>
+          ${track}
+          <p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#777">
+            Questions? Call ${PHONE} ext. 102.<br>${esc(LEGAL)}</p></div>`,
+      }).catch(() => {});
+    }
+    return json({ ok: true, order: order.code, status: "shipped" });
+  }
+
+  return json({ error: "Not found." }, 404);
+}
+
 async function afterPaid(env, order) {
   const full = await orderWithItems(env, order);
+  await pushToShipStation(env, full);
   const body = orderEmailHtml(full);
   const tasks = [sendMail(env, {
     to: notifyAddress(env),
@@ -2014,6 +2167,10 @@ ${url.searchParams.get("saved") ? `<div class="notice ok">Saved.</div>` : ""}
   <p class="quiet fineprint">Set <code>STRIPE_SECRET_KEY</code> and <code>STRIPE_WEBHOOK_SECRET</code> with <code>npx wrangler secret put</code>. The webhook endpoint is <code>/api/webhooks/stripe</code> listening for <code>checkout.session.completed</code>.</p>
   <h3>Email</h3>
   <p class="quiet">Notifications go to <strong>${esc(notifyAddress(env))}</strong> via Resend. Status: <strong>${env.RESEND_API_KEY ? "connected" : "not configured"}</strong>.</p>
+  <h3>Shipping &amp; fulfilment</h3>
+  <p class="quiet">Paid orders are sent automatically to ShipStation, which prints the labels and talks to the carriers. Status: <strong>${env.SHIPSTATION_KEY && env.SHIPSTATION_SECRET ? "connected" : "not configured"}</strong>.</p>
+  <p class="quiet">A warehouse or 3PL can also pull orders and post back tracking. Status: <strong>${env.FULFILMENT_USER && env.FULFILMENT_PASS ? "enabled" : "not enabled"}</strong>.</p>
+  <p class="quiet fineprint">Orders are pulled from <code>/api/fulfilment/orders</code> and shipments posted to <code>/api/fulfilment/shipped</code>, both over HTTP Basic auth. Marking an order shipped emails the customer their tracking number. Set <code>SHIPSTATION_KEY</code>, <code>SHIPSTATION_SECRET</code>, <code>FULFILMENT_USER</code> and <code>FULFILMENT_PASS</code> with <code>npx wrangler secret put</code>. If an order ever fails to reach ShipStation the office is emailed so it can be entered by hand — a paid order is never lost.</p>
 </div>`;
   return adminLayout("Settings", body, "/admin/settings");
 }
@@ -2066,6 +2223,7 @@ export default {
       if (path === "/api/checkout" && method === "POST") return apiCheckout(req, env, url);
       if (path === "/api/wholesale/terms" && method === "POST") return apiWholesaleTerms(req, env);
       if (path === "/api/webhooks/stripe" && method === "POST") return stripeWebhook(req, env, ctx);
+      if (path.startsWith("/api/fulfilment/")) return fulfilmentApi(req, env, url, path, method);
 
       /* ---- admin ---- */
       if (path === "/admin" || path.startsWith("/admin/")) {

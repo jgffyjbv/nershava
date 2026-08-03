@@ -95,6 +95,31 @@ it against production once real orders exist.
 that table — anything unmapped simply stays English. Cart strings reach the
 browser as `window.NS_STR`. Policy pages and the admin remain English.
 
+## Shipping & fulfilment
+
+Paid orders are pushed to **ShipStation** (`SHIPSTATION_KEY` /
+`SHIPSTATION_SECRET`), which is what actually talks to the carriers and to
+most 3PL warehouses. If a push fails the office is emailed to enter the
+order by hand — a paid order is never silently lost.
+
+A partner can also **pull**, over HTTP Basic auth (`FULFILMENT_USER` /
+`FULFILMENT_PASS`):
+
+- `GET /api/fulfilment/orders[?since=YYYY-MM-DD]` — paid, unshipped orders.
+  Wholesale orders carry `"unit_of_measure": "case"`, so quantities are read
+  as cases and not as individual boxes.
+- `POST /api/fulfilment/shipped` — `{order_number, carrier, tracking_number}`
+  marks the order shipped and emails the customer their tracking. Idempotent.
+
+Both sides are inert until their secrets are set, so the shop runs fine
+without either.
+
+**shop.app is not an option here.** It is Shopify's own marketplace — only
+stores hosted on Shopify can be listed. Reaching it would mean rebuilding
+the shop on Shopify (~$39/mo + per-transaction fees, and the wholesale
+portal would have to be rebuilt on an app). The ShipStation route above
+gets orders to the shipper without any of that.
+
 ## How it works
 
 **Retail.** Cart lives in `localStorage`. Every price is re-quoted server-side
