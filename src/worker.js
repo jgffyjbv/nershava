@@ -12,7 +12,7 @@ const EMAIL = "office@nershava.com";
 const TAGLINE = "The beauty of Shabbos, hand-poured.";
 
 // Bump on every deploy that changes site.css or site.js so browsers pick it up.
-const ASSET_VERSION = "15";
+const ASSET_VERSION = "16";
 
 /* ── i18n: Yiddish ──────────────────────────────────────────────────────
    The site renders in English; for lang=yi the finished HTML goes through
@@ -388,6 +388,30 @@ const imageUrl = (image) => {
   return "/assets/img/products/" + v;
 };
 
+/* ── pricing ───────────────────────────────────────────────────────────
+   One place decides what a product actually costs, so the card, the product
+   page, the cart quote and the Stripe line items can never disagree.
+   A sale price counts only when it is set and genuinely below retail. */
+
+const onSale = (p) =>
+  p.sale_price_cents > 0 && p.sale_price_cents < p.retail_price_cents;
+
+const retailPrice = (p) => (onSale(p) ? p.sale_price_cents : p.retail_price_cents);
+
+// What a case works out to per unit, and how much that beats buying singles.
+function caseSaving(p) {
+  const qty = Math.max(1, p.case_qty || 1);
+  if (!p.wholesale_price_cents || qty < 2) return null;
+  const perUnit = Math.round(p.wholesale_price_cents / qty);
+  const single = retailPrice(p);
+  if (!single || perUnit >= single) return { perUnit, pct: 0, saves: 0 };
+  return {
+    perUnit,
+    pct: Math.round((1 - perUnit / single) * 100),
+    saves: single * qty - p.wholesale_price_cents,
+  };
+}
+
 const slugify = (s) =>
   String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -468,6 +492,8 @@ async function getSettings(env) {
     wholesaleMin: +(s.wholesale_min_cents ?? 25000),
     storeLive: s.store_live !== "0",
     pricesProvisional: s.prices_provisional === "1",
+    homeColumns: Math.min(5, Math.max(2, +(s.home_columns ?? 4))),
+    showCasePricing: (s.show_case_pricing ?? "1") !== "0",
   };
 }
 
@@ -639,13 +665,18 @@ const productImg = (p, cls = "") =>
   `<img class="${cls}" src="${esc(imageUrl(p.image))}" alt="${esc(p.name)}" loading="lazy" width="400" height="400">`;
 
 function productCard(p) {
+  const sale = onSale(p);
+  const off = sale ? Math.round((1 - p.sale_price_cents / p.retail_price_cents) * 100) : 0;
   return `<article class="card">
-  <a class="card-media" href="/product/${esc(p.slug)}">${productImg(p)}</a>
+  <a class="card-media" href="/product/${esc(p.slug)}">
+    ${sale && off > 0 ? `<span class="sale-flag">${off}% off</span>` : ""}
+    ${productImg(p)}
+  </a>
   <div class="card-body">
     <h3 class="card-title"><a href="/product/${esc(p.slug)}">${esc(p.name)}</a></h3>
     ${p.unit_label ? `<p class="card-unit">${esc(p.unit_label)}${p.burn_time ? ` · ${esc(p.burn_time)}` : ""}</p>` : ""}
     <div class="card-foot">
-      <span class="price">${money(p.retail_price_cents)}</span>
+      <span class="price">${money(retailPrice(p))}${sale ? `<s>${money(p.retail_price_cents)}</s>` : ""}</span>
       <button class="btn btn-sm" data-add="${esc(p.slug)}">Add</button>
     </div>
   </div>
@@ -742,11 +773,19 @@ const REASONS = [
 /* ── storefront pages ──────────────────────────────────────────────────── */
 
 async function pageHome(env) {
-  const [{ results: collections }, { results: featured }] = await Promise.all([
-    env.DB.prepare("SELECT * FROM collections ORDER BY sort").all(),
-    env.DB.prepare(
-      "SELECT * FROM products WHERE featured = 1 AND retail_active = 1 ORDER BY sort LIMIT 4").all(),
+  const settings = await getSettings(env);
+  const [{ results: collections }, { results: products }] = await Promise.all([
+    env.DB.prepare(`
+      SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.collection = c.slug AND p.retail_active = 1) AS n
+      FROM collections c ORDER BY c.sort`).all(),
+    // Everything the office sells, in the order it set. home_position 1,2,3…
+    // comes first; anything left unplaced (0) falls in behind, by category.
+    env.DB.prepare(`
+      SELECT * FROM products WHERE retail_active = 1
+      ORDER BY CASE WHEN home_position > 0 THEN 0 ELSE 1 END,
+               home_position, collection, sort, name`).all(),
   ]);
+  const collName = Object.fromEntries(collections.map((c) => [c.slug, c.name]));
 
   const body = `
 ${heroBanner()}
@@ -767,30 +806,27 @@ ${trustStrip()}
   </div>
 </section>
 
-<section class="section band-cream">
+<section class="section band-cream" id="shop">
   <div class="wrap">
-    <p class="eyebrow center">Our Collections</p>
-    <h2 class="center">A complete range for every Yiddishe home.</h2>
-    <p class="lede center">From the weekly Shabbos to Yom Tov, from Havdalah to the Yahrtzeit — every candle you need, made with the same care.</p>
-    <div class="collection-grid">
-      ${collections.map((c) => `<a class="coll" href="/candles/${esc(c.slug)}">
-        <span class="coll-media"><img src="${esc(imageUrl(c.image))}" alt="" loading="lazy" width="300" height="300"></span>
-        <span class="coll-body">
-          <span class="coll-name">${esc(c.name)}</span>
-          <span class="coll-blurb">${esc(c.blurb)}</span>
-          <span class="coll-go">View collection →</span>
-        </span>
-      </a>`).join("")}
-    </div>
+    <p class="eyebrow center">Our Candles</p>
+    <h2 class="center">Everything we make, in one place.</h2>
+    <p class="lede center">From the weekly Shabbos to Yom Tov, from Havdalah to the Yahrtzeit — ${products.length} candles and wicks, made with the same care.</p>
+
+    <p class="ship-banner">
+      <strong>Free shipping</strong> on orders over ${money(settings.freeShipOver)}
+      <span>· ${money(settings.shippingFlat)} flat rate below that</span>
+      <a href="/wholesale">Wholesale? Case prices &amp; free freight terms →</a>
+    </p>
+
+    <nav class="cat-strip" aria-label="Jump to a category">
+      <a href="#shop" class="on">All ${products.length}</a>
+      ${collections.filter((c) => c.n > 0).map((c) =>
+        `<a href="/candles/${esc(c.slug)}">${esc(c.name)} <span>${c.n}</span></a>`).join("")}
+    </nav>
+
+    <div class="grid cols-${settings.homeColumns}">${products.map(productCard).join("")}</div>
   </div>
 </section>
-
-${featured.length ? `<section class="wrap section">
-  <p class="eyebrow center">Most Asked For</p>
-  <h2 class="center">The ones on the shelf every week.</h2>
-  <div class="grid">${featured.map(productCard).join("")}</div>
-  <p class="center mt"><a class="btn btn-outline" href="/candles">Browse all candles</a></p>
-</section>` : ""}
 
 <section class="section band-dark">
   <div class="wrap">
@@ -874,6 +910,7 @@ async function pageProduct(env, slug) {
   const p = await env.DB.prepare(
     "SELECT * FROM products WHERE slug = ? AND retail_active = 1").bind(slug).first();
   if (!p) return null;
+  const settings = await getSettings(env);
   const coll = await env.DB.prepare("SELECT * FROM collections WHERE slug = ?")
     .bind(p.collection).first();
   const { results: related } = await env.DB.prepare(
@@ -897,7 +934,12 @@ async function pageProduct(env, slug) {
     <p class="eyebrow"><a href="/candles/${esc(p.collection)}">${esc(coll ? coll.name : "Candles")}</a></p>
     <h1>${esc(p.name)}</h1>
     <p class="product-blurb">${esc(p.blurb)}</p>
-    <p class="product-price">${money(p.retail_price_cents)} <span>${esc(p.unit_label || "")}</span></p>
+    <p class="product-price">
+      ${money(retailPrice(p))}
+      ${onSale(p) ? `<s>${money(p.retail_price_cents)}</s>
+        <em class="save-tag">Save ${money(p.retail_price_cents - p.sale_price_cents)}</em>` : ""}
+      <span>${esc(p.unit_label || "")}</span>
+    </p>
     <form class="add-form" data-add-form="${esc(p.slug)}">
       <label class="qty">
         <span>Qty</span>
@@ -909,7 +951,18 @@ async function pageProduct(env, slug) {
     ${specs.length ? `<dl class="specs">
       ${specs.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}
     </dl>` : ""}
-    <p class="product-note">Buying for a store? <a href="/wholesale">Case pricing is available to wholesale accounts.</a></p>
+    ${settings.showCasePricing && caseSaving(p) ? (() => {
+      const c = caseSaving(p);
+      return `<div class="case-box">
+      <p class="case-head">Buying for a store?</p>
+      <p class="case-line">
+        <strong>Case of ${p.case_qty}</strong> — ${money(p.wholesale_price_cents)}
+        <span class="case-unit">${money(c.perUnit)} each</span>
+      </p>
+      ${c.pct > 0 ? `<p class="case-save">That is <strong>${c.pct}% less</strong> than buying singles — you save ${money(c.saves)} a case.</p>` : ""}
+      <p class="fineprint quiet">Case prices are for approved wholesale accounts.
+        <a href="/wholesale">Apply for one</a> or <a href="/wholesale/login">log in</a>.</p>
+    </div>`; })() : `<p class="product-note">Buying for a store? <a href="/wholesale">Case pricing is available to wholesale accounts.</a></p>`}
   </div>
 </section>
 ${related.length ? `<section class="wrap section">
@@ -1170,7 +1223,7 @@ async function quoteCart(env, items, kind = "retail", account = null) {
     const p = bySlug[item.slug];
     if (!p) continue;
     if (wholesale ? !p.wholesale_active : !p.retail_active) continue;
-    let unit = wholesale ? p.wholesale_price_cents : p.retail_price_cents;
+    let unit = wholesale ? p.wholesale_price_cents : retailPrice(p);
     if (wholesale && account && account.discount_pct)
       unit = Math.round(unit * (100 - account.discount_pct) / 100);
     if (!unit) continue;
@@ -2004,6 +2057,8 @@ const PRODUCT_SORTS = {
   name: "name",
   "price-low": "retail_price_cents, name",
   "price-high": "retail_price_cents DESC, name",
+  "home-order": "CASE WHEN home_position > 0 THEN 0 ELSE 1 END, home_position, name",
+  sale: "CASE WHEN sale_price_cents > 0 AND sale_price_cents < retail_price_cents THEN 0 ELSE 1 END, name",
   newest: "created_at DESC, id DESC",
 };
 
@@ -2048,23 +2103,26 @@ ${url.searchParams.get("deleted") ? `<div class="notice ok">Product deleted.</di
   </p>
   <p class="sorter">
     <span class="quiet">Sort</span>
-    ${[["category", "Category"], ["name", "Name"], ["price-low", "Price ↑"], ["price-high", "Price ↓"], ["newest", "Newest"]]
+    ${[["category", "Category"], ["name", "Name"], ["price-low", "Price ↑"], ["price-high", "Price ↓"], ["home-order", "Home order"], ["sale", "On sale"], ["newest", "Newest"]]
       .map(([k, l]) => `<a href="${qs({ sort: k })}"${sortKey === k ? ' class="on"' : ""}>${l}</a>`).join("")}
   </p>
 </div>
 
 <table class="table compact">
-<thead><tr><th></th><th>Product</th><th>Item #</th><th>Retail</th><th>Case qty</th><th>Case price</th><th>Live</th><th></th></tr></thead>
+<thead><tr><th></th><th>Product</th><th>Item #</th><th>Retail</th><th>Case qty</th><th>Case price</th><th>Home</th><th>Live</th><th></th></tr></thead>
 <tbody>${results.map((p) => `<tr>
   <td data-label=""><img class="row-thumb" src="${esc(imageUrl(p.image))}" alt="" loading="lazy" width="46" height="46"></td>
   <td data-label="Product"><strong>${esc(p.name)}</strong><br><small class="quiet">${esc(collName[p.collection] || p.collection)}</small></td>
   <td data-label="Item #"><small class="quiet">${esc(p.sku || "—")}</small></td>
-  <td data-label="Retail">${money(p.retail_price_cents)}</td>
+  <td data-label="Retail">${onSale(p)
+      ? `<strong>${money(p.sale_price_cents)}</strong> <s class="quiet">${money(p.retail_price_cents)}</s>`
+      : money(p.retail_price_cents)}</td>
   <td data-label="Case qty">${p.case_qty}</td>
   <td data-label="Case price">${money(p.wholesale_price_cents)}</td>
+  <td data-label="Home">${p.home_position ? `#${p.home_position}` : "<span class='quiet'>—</span>"}</td>
   <td data-label="Live">${p.retail_active ? "Shop" : ""}${p.retail_active && p.wholesale_active ? " · " : ""}${p.wholesale_active ? "Wholesale" : ""}${!p.retail_active && !p.wholesale_active ? "<span class='quiet'>hidden</span>" : ""}</td>
   <td data-label=""><a class="btn btn-sm btn-outline" href="/admin/products/${p.id}">Edit</a></td>
-</tr>`).join("") || `<tr><td colspan="8" class="quiet">No products in this category yet.</td></tr>`}</tbody></table>`;
+</tr>`).join("") || `<tr><td colspan="9" class="quiet">No products in this category yet.</td></tr>`}</tbody></table>`;
   return adminLayout("Products", body, "/admin/products");
 }
 
@@ -2123,7 +2181,7 @@ async function adminProductDetail(env, id) {
   const isNew = id === "new";
   const p = isNew
     ? { id: 0, name: "", sku: "", collection: "", blurb: "", description: "", unit_label: "",
-        burn_time: "", retail_price_cents: 0, case_qty: 1, wholesale_price_cents: 0,
+        burn_time: "", retail_price_cents: 0, sale_price_cents: 0, case_qty: 1, wholesale_price_cents: 0, home_position: 0,
         image: "", sort: 0, retail_active: 1, wholesale_active: 1, featured: 0, slug: "" }
     : await env.DB.prepare("SELECT * FROM products WHERE id = ?").bind(id).first();
   if (!p) return null;
@@ -2149,9 +2207,17 @@ async function adminProductDetail(env, id) {
     </div>
     <div class="row">
       <label>Retail price ($)<input name="retail_price" value="${(p.retail_price_cents / 100).toFixed(2)}" inputmode="decimal"></label>
+      <label>Sale price ($)<input name="sale_price" value="${p.sale_price_cents ? (p.sale_price_cents / 100).toFixed(2) : ""}" inputmode="decimal" placeholder="leave empty — not on sale"></label>
+    </div>
+    <p class="fineprint quiet">Set a sale price below the retail price and the shop charges the sale price, shows the old one crossed out, and puts a “% off” flag on the picture. Clear the box to end the sale.</p>
+    <div class="row">
       <label>Units per case<input name="case_qty" value="${p.case_qty}" inputmode="numeric"></label>
       <label>Case price ($)<input name="wholesale_price" value="${(p.wholesale_price_cents / 100).toFixed(2)}" inputmode="decimal"></label>
+      <label>Home page position<input name="home_position" value="${p.home_position || ""}" inputmode="numeric" placeholder="1, 2, 3…"></label>
     </div>
+    ${(() => { const c = caseSaving(p); return c && c.pct > 0
+      ? `<p class="fineprint quiet">That case works out to <strong>${money(c.perUnit)}</strong> each — ${c.pct}% below the shop price, saving ${money(c.saves)} a case. Shoppers see this on the product page.</p>`
+      : `<p class="fineprint quiet">Fill in units per case and the case price and the product page will show the per-unit price and the saving.</p>`; })()}
     <label>Photo<input type="file" name="photo" accept="image/*"></label>
     <p class="fineprint quiet">Choose a JPG, PNG or WebP and it will be uploaded when you save. A photo on a plain white background works best.</p>
     <div class="row">
@@ -2299,9 +2365,14 @@ ${url.searchParams.get("saved") ? `<div class="notice ok">Saved.</div>` : ""}
     <label>Free shipping over ($)<input name="free_ship_over" value="${(s.freeShipOver / 100).toFixed(2)}" inputmode="decimal"></label>
   </div>
   <label>Wholesale minimum order ($)<input name="wholesale_min" value="${(s.wholesaleMin / 100).toFixed(2)}" inputmode="decimal"></label>
+  <p class="fineprint quiet">The flat rate and the free-shipping figure are printed on the home page automatically — change them here and the page follows.</p>
+  <label>Products per row on the home page
+    <select name="home_columns">${[2, 3, 4, 5].map((n) =>
+      `<option value="${n}"${n === s.homeColumns ? " selected" : ""}>${n} across</option>`).join("")}</select></label>
   <div class="checks">
     <label class="check"><input type="checkbox" name="store_live"${s.storeLive ? " checked" : ""}> Shop is open for orders</label>
     <label class="check"><input type="checkbox" name="prices_provisional"${s.pricesProvisional ? " checked" : ""}> Show the "prices are provisional" warning in admin</label>
+    <label class="check"><input type="checkbox" name="show_case_pricing"${s.showCasePricing ? " checked" : ""}> Show case prices and the per-case saving on product pages</label>
   </div>
   <button class="btn btn-gold" type="submit">Save settings</button>
 </form>
@@ -2473,22 +2544,23 @@ export default {
 
             const fields = [f.name, f.sku || null, f.collection, f.blurb || null, f.description || null,
               f.unit_label || null, f.burn_time || null, cents(f.retail_price),
-              Math.max(1, parseInt(f.case_qty, 10) || 1), cents(f.wholesale_price),
-              image, parseInt(f.sort, 10) || 0,
+              cents(f.sale_price), Math.max(1, parseInt(f.case_qty, 10) || 1), cents(f.wholesale_price),
+              image, parseInt(f.sort, 10) || 0, Math.max(0, parseInt(f.home_position, 10) || 0),
               f.retail_active ? 1 : 0, f.wholesale_active ? 1 : 0, f.featured ? 1 : 0];
 
             if (isNew) {
               await env.DB.prepare(`INSERT INTO products
                 (name, sku, collection, blurb, description, unit_label, burn_time,
-                 retail_price_cents, case_qty, wholesale_price_cents, image, sort,
-                 retail_active, wholesale_active, featured, slug)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+                 retail_price_cents, sale_price_cents, case_qty, wholesale_price_cents,
+                 image, sort, home_position, retail_active, wholesale_active, featured, slug)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
                 .bind(...fields, await uniqueSlug(env, f.name)).run();
               return redirect("/admin/products?added=1");
             }
             await env.DB.prepare(`UPDATE products SET name=?, sku=?, collection=?, blurb=?, description=?,
-              unit_label=?, burn_time=?, retail_price_cents=?, case_qty=?, wholesale_price_cents=?,
-              image=?, sort=?, retail_active=?, wholesale_active=?, featured=? WHERE id=?`)
+              unit_label=?, burn_time=?, retail_price_cents=?, sale_price_cents=?, case_qty=?,
+              wholesale_price_cents=?, image=?, sort=?, home_position=?,
+              retail_active=?, wholesale_active=?, featured=? WHERE id=?`)
               .bind(...fields, prodMatch[1]).run();
             return redirect("/admin/products?saved=1");
           }
@@ -2547,6 +2619,8 @@ export default {
               setSetting(env, "wholesale_min_cents", cents(f.wholesale_min)),
               setSetting(env, "store_live", f.store_live ? 1 : 0),
               setSetting(env, "prices_provisional", f.prices_provisional ? 1 : 0),
+              setSetting(env, "home_columns", Math.min(5, Math.max(2, parseInt(f.home_columns, 10) || 4))),
+              setSetting(env, "show_case_pricing", f.show_case_pricing ? 1 : 0),
             ]);
             return redirect("/admin/settings?saved=1");
           }
