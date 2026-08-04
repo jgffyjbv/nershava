@@ -1556,7 +1556,13 @@ ${items}
       { headers: { "Content-Type": "text/xml; charset=utf-8" } });
   }
 
-  return new Response("Error: invalid or missing action.", { status: 400 });
+  // No action, or one we don't know: answer with a valid empty order list
+  // rather than an error. ShipStation pings the bare URL when you connect a
+  // custom store, and a 400 there reads as "connection failed". Still behind
+  // auth, so this leaks nothing.
+  return new Response(
+    `<?xml version="1.0" encoding="utf-8"?>\n<Orders pages="1"></Orders>`,
+    { headers: { "Content-Type": "text/xml; charset=utf-8" } });
 }
 
 // Pull side: a fulfilment partner polls for orders and posts shipments back.
