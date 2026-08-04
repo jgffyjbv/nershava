@@ -97,28 +97,47 @@ browser as `window.NS_STR`. Policy pages and the admin remain English.
 
 ## Shipping & fulfilment
 
-Paid orders are pushed to **ShipStation** (`SHIPSTATION_KEY` /
-`SHIPSTATION_SECRET`), which is what actually talks to the carriers and to
-most 3PL warehouses. If a push fails the office is emailed to enter the
-order by hand — a paid order is never silently lost.
+### ShipStation (the route to use)
 
-A partner can also **pull**, over HTTP Basic auth (`FULFILMENT_USER` /
-`FULFILMENT_PASS`):
+ShipStation's **Custom Store** integration — works on every ShipStation plan,
+needs no API keys. Set the two secrets:
 
-- `GET /api/fulfilment/orders[?since=YYYY-MM-DD]` — paid, unshipped orders.
-  Wholesale orders carry `"unit_of_measure": "case"`, so quantities are read
-  as cases and not as individual boxes.
-- `POST /api/fulfilment/shipped` — `{order_number, carrier, tracking_number}`
-  marks the order shipped and emails the customer their tracking. Idempotent.
+```bash
+npx wrangler secret put FULFILMENT_USER
+npx wrangler secret put FULFILMENT_PASS
+```
 
-Both sides are inert until their secrets are set, so the shop runs fine
-without either.
+then in ShipStation: **Settings → Selling Channels → Store Setup → Connect a
+Store → Custom Store**, and give it
+
+- URL: `https://nershava.avrumy95.workers.dev/api/shipstation`
+- the same username and password
+
+ShipStation then polls `?action=export` for paid, unshipped orders (XML, dates
+in its documented `MM/dd/yyyy HH:mm`) and calls `?action=shipnotify` when a
+label is printed — which marks the order shipped and emails the customer their
+tracking. Idempotent on repeat. `/admin/settings` shows the details to paste.
+
+Wholesale orders carry an `InternalNotes` line saying quantities are **cases**,
+so nobody ships 2 boxes when a grocery ordered 2 cases of 17.
+
+**Not** ShipStation's V1 API: it is deprecated and restricted to their higher
+plans. The push in `pushToShipStation()` still works if the account has V1
+access (`SHIPSTATION_KEY`/`SHIPSTATION_SECRET`), and mails the office if a push
+fails, but Custom Store is the supported path.
 
 **shop.app is not an option here.** It is Shopify's own marketplace — only
-stores hosted on Shopify can be listed. Reaching it would mean rebuilding
-the shop on Shopify (~$39/mo + per-transaction fees, and the wholesale
-portal would have to be rebuilt on an app). The ShipStation route above
-gets orders to the shipper without any of that.
+stores hosted on Shopify can be listed. Reaching it would mean rebuilding on
+Shopify (~$39/mo plus per-transaction fees, and the wholesale portal would have
+to be rebuilt as an app). ShipStation gets orders to the shipper without that.
+
+### Other 3PLs
+
+Same credentials, JSON instead of XML: `GET /api/fulfilment/orders[?since=]`
+and `POST /api/fulfilment/shipped` with `{order_number, carrier,
+tracking_number}`. Wholesale lines carry `"unit_of_measure": "case"`.
+
+All of it stays inert until the secrets exist.
 
 ## How it works
 

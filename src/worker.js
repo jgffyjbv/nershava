@@ -1397,6 +1397,168 @@ async function pushToShipStation(env, order) {
   }
 }
 
+// Marks an order shipped and emails the customer their tracking. Shared by
+// the JSON fulfilment API and the ShipStation custom-store endpoint, so both
+// behave identically and both are idempotent.
+async function markShipped(env, orderNumber, carrierRaw, trackingRaw) {
+  const code = String(orderNumber || "").trim();
+  if (!code) return { missing: true };
+  const order = await env.DB.prepare("SELECT * FROM orders WHERE code = ?").bind(code).first();
+  if (!order) return { unknown: true };
+  if (order.status === "shipped") return { already: true, code };
+
+  const carrier = String(carrierRaw || "").slice(0, 60);
+  const tracking = String(trackingRaw || "").slice(0, 120);
+  const note = [order.notes, `Shipped ${carrier} ${tracking}`.trim()].filter(Boolean).join("\n");
+  await env.DB.prepare("UPDATE orders SET status = 'shipped', notes = ? WHERE id = ?")
+    .bind(note, order.id).run();
+
+  if (order.email) {
+    const track = tracking
+      ? `<p style="font-family:Helvetica,Arial,sans-serif">Carrier: <strong>${esc(carrier || "—")}</strong><br>
+           Tracking: <strong>${esc(tracking)}</strong></p>`
+      : "";
+    await sendMail(env, {
+      to: order.email,
+      subject: `Your Ner Shava order ${order.code} is on its way`,
+      html: `<div style="font-family:Georgia,serif;max-width:560px;color:#241a17">
+        <h2 style="color:#5C1A22;margin:0 0 4px">Ner Shava Candles</h2>
+        <p style="font-family:Helvetica,Arial,sans-serif">Your order <strong>${esc(order.code)}</strong> has shipped.</p>
+        ${track}
+        <p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#777">
+          Questions? Call ${PHONE} ext. 102.<br>${esc(LEGAL)}</p></div>`,
+    }).catch(() => {});
+  }
+  return { ok: true, code: order.code };
+}
+
+/* ── ShipStation custom store ──────────────────────────────────────────
+   The integration David can actually use: he picks "Custom Store" in
+   ShipStation and pastes one URL. Works on every ShipStation plan and
+   needs no API keys — unlike the V1 API, which is deprecated and gated
+   behind their higher tiers.
+
+   ShipStation calls this one endpoint with HTTP Basic auth:
+     GET  ?action=export&start_date=..&end_date=..&page=N  → XML of orders
+     POST ?action=shipnotify&order_number=..&carrier=..&tracking_number=..
+   Dates are ShipStation's documented MM/dd/yyyy HH:mm. If orders ever fail
+   to import, that format is the first thing to check. */
+
+const ssDate = (sql) => {
+  // "2026-08-03 23:42:28" (UTC, from SQLite) → "08/03/2026 23:42"
+  const d = new Date(String(sql || "").replace(" ", "T") + "Z");
+  if (isNaN(d)) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+};
+
+// ShipStation's guide recommends CDATA for free text; strip the one sequence
+// that could close it early.
+const cdata = (v) => `<![CDATA[${String(v == null ? "" : v).replace(/]]>/g, "]]")}]]>`;
+
+async function shipStationStore(req, env, url, method) {
+  const user = env.FULFILMENT_USER, pass = env.FULFILMENT_PASS;
+  if (!user || !pass) return new Response("Custom store is not enabled.", { status: 503 });
+  const header = req.headers.get("Authorization") || "";
+  const expected = "Basic " + btoa(`${user}:${pass}`);
+  if (header.length !== expected.length || !timingSafeEqual(header, expected))
+    return new Response("Unauthorised.", {
+      status: 401, headers: { "WWW-Authenticate": 'Basic realm="shipstation"' },
+    });
+
+  const action = (url.searchParams.get("action") || "").toLowerCase();
+
+  if (action === "shipnotify") {
+    // ShipStation sends these on the query string; accept a form/JSON body too.
+    let body = {};
+    if (method === "POST") {
+      const raw = await req.text().catch(() => "");
+      if (raw.trim().startsWith("{")) { try { body = JSON.parse(raw); } catch {} }
+      else if (raw) body = Object.fromEntries(new URLSearchParams(raw));
+    }
+    const pick = (k) => url.searchParams.get(k) || body[k] || "";
+    const result = await markShipped(env, pick("order_number"),
+      [pick("carrier"), pick("service")].filter(Boolean).join(" "), pick("tracking_number"));
+    if (result.missing) return new Response("Error: order_number is required.", { status: 400 });
+    if (result.unknown) return new Response("Error: unknown order.", { status: 404 });
+    return new Response("success", { headers: { "Content-Type": "text/plain" } });
+  }
+
+  if (action === "export") {
+    const from = url.searchParams.get("start_date");
+    const to = url.searchParams.get("end_date");
+    // ShipStation sends MM/dd/yyyy HH:mm; convert back to SQLite's format.
+    const toSql = (v) => {
+      const m = String(v || "").match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+      if (!m) return null;
+      return `${m[3]}-${m[1]}-${m[2]} ${m[4] || "00"}:${m[5] || "00"}:00`;
+    };
+    const lo = toSql(from), hi = toSql(to);
+    const where = ["payment_status IN ('paid','terms')", "status NOT IN ('shipped','cancelled')"];
+    const binds = [];
+    if (lo) { where.push("created_at >= ?"); binds.push(lo); }
+    if (hi) { where.push("created_at <= ?"); binds.push(hi); }
+    const { results } = await env.DB.prepare(
+      `SELECT * FROM orders WHERE ${where.join(" AND ")} ORDER BY created_at LIMIT 100`).bind(...binds).all();
+
+    const blocks = [];
+    for (const o of results || []) {
+      const full = await orderWithItems(env, o);
+      const name = full.name || full.business || "Customer";
+      const items = full.items.map((i) => `      <Item>
+        <SKU>${cdata(i.sku || "")}</SKU>
+        <Name>${cdata(i.unit_label ? `${i.name} (${i.unit_label})` : i.name)}</Name>
+        <Quantity>${i.qty}</Quantity>
+        <UnitPrice>${(i.unit_price_cents / 100).toFixed(2)}</UnitPrice>
+      </Item>`).join("\n");
+      // Wholesale quantities are CASES — say so where the packer will see it.
+      const notes = full.kind === "wholesale"
+        ? `WHOLESALE${full.business ? ` — ${full.business}` : ""}. Quantities are CASES, not single boxes.`
+        : "";
+      blocks.push(`  <Order>
+    <OrderNumber>${cdata(full.code)}</OrderNumber>
+    <OrderDate>${ssDate(full.created_at)}</OrderDate>
+    <OrderStatus>${cdata(full.status === "paid" ? "paid" : full.status)}</OrderStatus>
+    <LastModified>${ssDate(full.created_at)}</LastModified>
+    <ShippingMethod>${cdata(full.kind === "wholesale" ? "Freight — quoted by office" : "Standard")}</ShippingMethod>
+    <OrderTotal>${(full.total_cents / 100).toFixed(2)}</OrderTotal>
+    <TaxAmount>0.00</TaxAmount>
+    <ShippingAmount>${(full.shipping_cents / 100).toFixed(2)}</ShippingAmount>
+    ${notes ? `<InternalNotes>${cdata(notes)}</InternalNotes>` : ""}
+    <Customer>
+      <CustomerCode>${cdata(full.email || full.code)}</CustomerCode>
+      <BillTo>
+        <Name>${cdata(name)}</Name>
+        <Company>${cdata(full.business || "")}</Company>
+        <Phone>${cdata(full.phone || "")}</Phone>
+        <Email>${cdata(full.email || "")}</Email>
+      </BillTo>
+      <ShipTo>
+        <Name>${cdata(name)}</Name>
+        <Company>${cdata(full.business || "")}</Company>
+        <Address1>${cdata(full.ship_line1 || "")}</Address1>
+        <Address2>${cdata(full.ship_line2 || "")}</Address2>
+        <City>${cdata(full.ship_city || "")}</City>
+        <State>${cdata(full.ship_state || "")}</State>
+        <PostalCode>${cdata(full.ship_zip || "")}</PostalCode>
+        <Country>${cdata(full.ship_country || "US")}</Country>
+        <Phone>${cdata(full.phone || "")}</Phone>
+      </ShipTo>
+    </Customer>
+    <Items>
+${items}
+    </Items>
+  </Order>`);
+    }
+
+    return new Response(
+      `<?xml version="1.0" encoding="utf-8"?>\n<Orders pages="1">\n${blocks.join("\n")}\n</Orders>`,
+      { headers: { "Content-Type": "text/xml; charset=utf-8" } });
+  }
+
+  return new Response("Error: invalid or missing action.", { status: 400 });
+}
+
 // Pull side: a fulfilment partner polls for orders and posts shipments back.
 async function fulfilmentApi(req, env, url, path, method) {
   const user = env.FULFILMENT_USER, pass = env.FULFILMENT_PASS;
@@ -1447,35 +1609,11 @@ async function fulfilmentApi(req, env, url, path, method) {
 
   if (path === "/api/fulfilment/shipped" && method === "POST") {
     const body = await req.json().catch(() => ({}));
-    const code = String(body.order_number || "").trim();
-    if (!code) return json({ error: "order_number is required." }, 400);
-    const order = await env.DB.prepare("SELECT * FROM orders WHERE code = ?").bind(code).first();
-    if (!order) return json({ error: "Unknown order." }, 404);
-    if (order.status === "shipped") return json({ ok: true, already: true });
-
-    const carrier = String(body.carrier || "").slice(0, 60);
-    const tracking = String(body.tracking_number || "").slice(0, 120);
-    const note = [order.notes, `Shipped ${carrier} ${tracking}`.trim()].filter(Boolean).join("\n");
-    await env.DB.prepare("UPDATE orders SET status = 'shipped', notes = ? WHERE id = ?")
-      .bind(note, order.id).run();
-
-    if (order.email) {
-      const track = tracking
-        ? `<p style="font-family:Helvetica,Arial,sans-serif">Carrier: <strong>${esc(carrier || "—")}</strong><br>
-             Tracking: <strong>${esc(tracking)}</strong></p>`
-        : "";
-      await sendMail(env, {
-        to: order.email,
-        subject: `Your Ner Shava order ${order.code} is on its way`,
-        html: `<div style="font-family:Georgia,serif;max-width:560px;color:#241a17">
-          <h2 style="color:#5C1A22;margin:0 0 4px">Ner Shava Candles</h2>
-          <p style="font-family:Helvetica,Arial,sans-serif">Your order <strong>${esc(order.code)}</strong> has shipped.</p>
-          ${track}
-          <p style="font-family:Helvetica,Arial,sans-serif;font-size:13px;color:#777">
-            Questions? Call ${PHONE} ext. 102.<br>${esc(LEGAL)}</p></div>`,
-      }).catch(() => {});
-    }
-    return json({ ok: true, order: order.code, status: "shipped" });
+    const result = await markShipped(env, body.order_number, body.carrier, body.tracking_number);
+    if (result.missing) return json({ error: "order_number is required." }, 400);
+    if (result.unknown) return json({ error: "Unknown order." }, 404);
+    if (result.already) return json({ ok: true, already: true });
+    return json({ ok: true, order: result.code, status: "shipped" });
   }
 
   return json({ error: "Not found." }, 404);
@@ -2167,10 +2305,17 @@ ${url.searchParams.get("saved") ? `<div class="notice ok">Saved.</div>` : ""}
   <p class="quiet fineprint">Set <code>STRIPE_SECRET_KEY</code> and <code>STRIPE_WEBHOOK_SECRET</code> with <code>npx wrangler secret put</code>. The webhook endpoint is <code>/api/webhooks/stripe</code> listening for <code>checkout.session.completed</code>.</p>
   <h3>Email</h3>
   <p class="quiet">Notifications go to <strong>${esc(notifyAddress(env))}</strong> via Resend. Status: <strong>${env.RESEND_API_KEY ? "connected" : "not configured"}</strong>.</p>
-  <h3>Shipping &amp; fulfilment</h3>
-  <p class="quiet">Paid orders are sent automatically to ShipStation, which prints the labels and talks to the carriers. Status: <strong>${env.SHIPSTATION_KEY && env.SHIPSTATION_SECRET ? "connected" : "not configured"}</strong>.</p>
-  <p class="quiet">A warehouse or 3PL can also pull orders and post back tracking. Status: <strong>${env.FULFILMENT_USER && env.FULFILMENT_PASS ? "enabled" : "not enabled"}</strong>.</p>
-  <p class="quiet fineprint">Orders are pulled from <code>/api/fulfilment/orders</code> and shipments posted to <code>/api/fulfilment/shipped</code>, both over HTTP Basic auth. Marking an order shipped emails the customer their tracking number. Set <code>SHIPSTATION_KEY</code>, <code>SHIPSTATION_SECRET</code>, <code>FULFILMENT_USER</code> and <code>FULFILMENT_PASS</code> with <code>npx wrangler secret put</code>. If an order ever fails to reach ShipStation the office is emailed so it can be entered by hand — a paid order is never lost.</p>
+  <h3>ShipStation</h3>
+  <p class="quiet">Status: <strong>${env.FULFILMENT_USER && env.FULFILMENT_PASS ? "ready to connect" : "not enabled"}</strong>.</p>
+  ${env.FULFILMENT_USER && env.FULFILMENT_PASS ? `
+  <p class="quiet">In ShipStation go to <strong>Settings → Selling Channels → Store Setup → Connect a Store</strong>, choose <strong>Custom Store</strong>, and enter:</p>
+  <ol class="steps fineprint">
+    <li><strong>URL to custom page:</strong><br><code>https://nershava.avrumy95.workers.dev/api/shipstation</code></li>
+    <li><strong>Username / Password:</strong> the fulfilment credentials set on the worker.</li>
+  </ol>
+  <p class="quiet fineprint">ShipStation then pulls new paid orders on its own and, when you ship one, tells the site — which marks the order shipped and emails the customer their tracking number automatically. Wholesale orders carry a note that the quantities are <strong>cases</strong>, not single boxes.</p>`
+  : `<p class="quiet fineprint">Set <code>FULFILMENT_USER</code> and <code>FULFILMENT_PASS</code> with <code>npx wrangler secret put</code>, then this panel shows the exact details to paste into ShipStation's Custom Store setup.</p>`}
+  <p class="quiet fineprint">A warehouse or 3PL that prefers JSON can use <code>/api/fulfilment/orders</code> and <code>/api/fulfilment/shipped</code> with the same credentials. ShipStation's own V1 API is also supported via <code>SHIPSTATION_KEY</code>/<code>SHIPSTATION_SECRET</code> (status: <strong>${env.SHIPSTATION_KEY && env.SHIPSTATION_SECRET ? "connected" : "not configured"}</strong>), but that API is deprecated and only offered on their higher plans — the Custom Store above is the better route.</p>
 </div>`;
   return adminLayout("Settings", body, "/admin/settings");
 }
@@ -2223,6 +2368,7 @@ export default {
       if (path === "/api/checkout" && method === "POST") return apiCheckout(req, env, url);
       if (path === "/api/wholesale/terms" && method === "POST") return apiWholesaleTerms(req, env);
       if (path === "/api/webhooks/stripe" && method === "POST") return stripeWebhook(req, env, ctx);
+      if (path === "/api/shipstation") return shipStationStore(req, env, url, method);
       if (path.startsWith("/api/fulfilment/")) return fulfilmentApi(req, env, url, path, method);
 
       /* ---- admin ---- */
